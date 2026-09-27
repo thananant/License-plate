@@ -114,8 +114,9 @@ docker compose up -d --build
 | `ADMIN_PATH` | `admin` | path ลับของหน้าผู้ดูแล เช่น `panel-x7k2m9` → `https://site/panel-x7k2m9` |
 | `ADMIN_TOKEN` | ว่าง | รหัสผู้ดูแล (≥24 ตัวอักษร) ใส่แทนรหัสจัดการในหน้า "จัดการรายงาน" เพื่อลบ/แก้สถานะรายงานใดก็ได้ ใช้ลบสแปม |
 | `GEMINI_API_KEY` | ว่าง | คีย์จาก https://aistudio.google.com/apikey (free tier) เปิดใช้ AI อ่านป้ายด้วย Gemini |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | โมเดล Gemini ที่ใช้ |
+| `GEMINI_MODEL` | `auto` | `auto` = เลือกโมเดล flash รุ่นใหม่สุดที่คีย์ใช้ได้เอง (Google ปลดชื่อโมเดลบ่อย) หรือระบุชื่อเอง |
 | `ANTHROPIC_API_KEY` | ว่าง | ถ้าใส่ จะใช้ Claude แทน Gemini (แม่นกว่า เสียเงิน) ไม่ใส่ทั้งคู่ = Tesseract ในเบราว์เซอร์ |
+| `OCR_LOCAL_VERSION` | `latest` | เวอร์ชันตัวอ่านในเครื่อง: `latest` หรือ `v1` (รุ่นแรก) ผู้ใช้ทดสอบเทียบเองได้ด้วย `?ocr=v1` / `?ocr=latest` ท้าย URL |
 | `OCR_MODEL` | `claude-opus-5` | โมเดลที่ใช้อ่านป้าย เปลี่ยนเป็น `claude-sonnet-5` หรือ `claude-haiku-4-5` เพื่อลดค่าใช้จ่าย |
 | `OCR_DAILY_LIMIT` | `500` | เพดานจำนวนครั้งที่เรียก AI ต่อวัน (Gemini free tier มีโควตารายวัน ตั้งให้ต่ำกว่า) นอกจากนี้จำกัด 12 ครั้ง/ชม./IP |
 | `PHOTO_REQUIRED` | `true` | บังคับต้องมีรูปจากกล้องในแอปทุกรายงาน |

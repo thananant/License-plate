@@ -357,6 +357,8 @@ test('gemini model auto-selection', () => {
     { name: 'models/gemini-3.0-flash-preview-0901', supportedGenerationMethods: ['generateContent'] },
   ];
   assert.equal(chooseGeminiModel(list, 'gemini-2.5-flash'), 'gemini-3.0-flash'); // preferred missing -> newest flash
+  assert.equal(chooseGeminiModel(list, 'auto'), 'gemini-3.0-flash');
   assert.equal(chooseGeminiModel(list, 'gemini-2.0-flash'), 'gemini-2.0-flash'); // preferred present
+  assert.equal(chooseGeminiModel(list, 'gemini-2.0-flash', new Set(['gemini-2.0-flash'])), 'gemini-3.0-flash'); // retired ones skipped
   assert.equal(chooseGeminiModel([{ name: 'models/x', supportedGenerationMethods: ['embedContent'] }], 'y'), null);
 });

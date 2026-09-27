@@ -206,6 +206,8 @@ app.get('/api/config', readLimiter, (_req, res) => {
     limits: { maxPhotoBytes: MAX_PHOTO_BYTES, maxNote: MAX_NOTE, maxPlaceNote: MAX_PLACE_NOTE },
     ocrEnabled,
     ocrProvider: OCR_PROVIDER,
+    ocrLocalVersion: (process.env.OCR_LOCAL_VERSION || 'latest').trim(),
+    assetVersion: ASSET_VERSION,
     photoRequired: PHOTO_REQUIRED,
     maxPlates: MAX_PLATES_PER_REPORT,
     totalFound: store.countFound(),
@@ -481,7 +483,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 // Cache busting: index.html is never cached; CSS/JS URLs carry a content hash
 // so every deploy is picked up on the next refresh.
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js', 'js/ocr-local.js', 'js/camera.js'];
+const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js', 'js/ocr-local.js', 'js/ocr-local.v1.js', 'js/camera.js'];
 const assetHash = crypto.createHash('sha256');
 for (const f of ASSET_FILES) assetHash.update(await fs.readFile(path.join(PUBLIC_DIR, f)));
 const ASSET_VERSION = assetHash.digest('hex').slice(0, 10);

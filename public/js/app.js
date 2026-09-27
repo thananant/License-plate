@@ -792,6 +792,20 @@
     }
   }
 
+  // On-device reader version: ?ocr=v1 (first release) or ?ocr=latest overrides the
+  // server default (OCR_LOCAL_VERSION) so versions can be compared on real photos.
+  function loadLocalOcr() {
+    const param = new URLSearchParams(location.search).get('ocr');
+    const ver = (param || cfg.ocrLocalVersion || 'latest').toLowerCase();
+    const file = ver === 'v1' ? '/js/ocr-local.v1.js' : '/js/ocr-local.js';
+    return new Promise((resolve) => {
+      const sc = document.createElement('script'); sc.src = file + '?v=' + (cfg.assetVersion || '');
+      sc.onload = () => { window.LocalOCR && (window.LocalOCR.version = ver === 'v1' ? 'v1' : 'latest'); resolve(); };
+      sc.onerror = () => resolve();
+      document.head.appendChild(sc);
+    });
+  }
+
   async function init() {
     try {
       cfg = await api('/api/config');
@@ -799,6 +813,7 @@
       $('#results-count').textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
       return;
     }
+    await loadLocalOcr();
     fillProvinces();
     addPlateRow();
     if (!cfg.photoRequired) { $('#s1-req').hidden = true; $('#s1-hint').textContent = 'ไม่บังคับ • ถ่ายจากกล้องเท่านั้น'; }
@@ -807,7 +822,7 @@
       $('#s1-note').textContent = `อ่านเลขด้วย AI (${name}) ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • รูปถูกส่งไปให้ AI อ่านเฉพาะตอนกดปุ่ม • ระบบลบ EXIF/GPS อัตโนมัติ`;
       $('#r-ai').textContent = `✨ อ่านเลขทะเบียนด้วย AI (${name})`;
     } else {
-      $('#r-ai').textContent = '🔍 อ่านเลขทะเบียนอัตโนมัติ (ตัวอ่านในเครื่อง)';
+      $('#r-ai').textContent = '🔍 อ่านเลขทะเบียนอัตโนมัติ (ตัวอ่านในเครื่อง' + (window.LocalOCR?.version === 'v1' ? ' v1' : '') + ')';
     }
     try {
       map = await window.PlateMap.createMap($('#map'), cfg);

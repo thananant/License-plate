@@ -17,8 +17,9 @@ export const OCR_PROVIDER = ANTHROPIC_KEY ? 'anthropic' : GEMINI_KEY ? 'gemini' 
 // use (Google renames/retires models often); GEMINI_MODEL is a preference.
 export const OCR_MODEL = OCR_PROVIDER === 'anthropic'
   ? (process.env.OCR_MODEL || 'claude-opus-5').trim()
-  : (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
-let geminiModel = null; // resolved name, e.g. 'gemini-2.5-flash'
+  : (process.env.GEMINI_MODEL || 'auto').trim(); // 'auto' = newest flash model the key can use
+let geminiModel = null; // resolved name, e.g. 'gemini-3.8-flash'
+const geminiRetired = new Set(); // models that answered 404 ("no longer available")
 export const ocrEnabled = OCR_PROVIDER != null;
 
 const client = OCR_PROVIDER === 'anthropic' ? new Anthropic({ apiKey: ANTHROPIC_KEY, maxRetries: 1, timeout: 60_000 }) : null;
@@ -136,13 +137,13 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  * configured name, then newer "flash" models, then anything that can
  * generateContent. Exported for tests.
  */
-export function chooseGeminiModel(models, preferred) {
+export function chooseGeminiModel(models, preferred, exclude = new Set()) {
   const usable = (models || [])
     .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
     .map((m) => String(m.name || '').replace(/^models\//, ''))
-    .filter((n) => n && !/embedding|imagen|veo|tts|audio|image-generation|live|thinking-exp|-exp-/i.test(n));
+    .filter((n) => n && !exclude.has(n) && !/embedding|imagen|veo|tts|audio|image-generation|live|thinking-exp|-exp-/i.test(n));
   if (!usable.length) return null;
-  if (preferred && usable.includes(preferred)) return preferred;
+  if (preferred && preferred !== 'auto' && usable.includes(preferred)) return preferred;
   const score = (n) => {
     const ver = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || '0');
     let s = ver * 100;
@@ -167,10 +168,10 @@ async function resolveGeminiModel(force = false) {
   if (res.status === 400 || res.status === 401 || res.status === 403) throw err('ocr_config', { detail: 'models list http_' + res.status + ' ' + (await res.text().catch(() => '')).slice(0, 200) });
   if (!res.ok) throw err('ocr_failed', { detail: 'models list http_' + res.status });
   const json = await res.json();
-  const chosen = chooseGeminiModel(json.models, OCR_MODEL);
+  const chosen = chooseGeminiModel(json.models, OCR_MODEL, geminiRetired);
   if (!chosen) throw err('ocr_config', { detail: 'no Gemini model supports generateContent for this key' });
-  if (chosen !== OCR_MODEL) console.warn(`gemini: "${OCR_MODEL}" not available, using "${chosen}" (available: ${(json.models || []).map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /gemini/.test(n)).slice(0, 15).join(', ')})`);
-  else console.log(`gemini: using ${chosen}`);
+  const names = (json.models || []).map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /gemini/.test(n));
+  console.log(`gemini: using ${chosen}${OCR_MODEL !== 'auto' && chosen !== OCR_MODEL ? ` ("${OCR_MODEL}" not usable)` : ''} (available: ${names.slice(0, 20).join(', ')})`);
   geminiModel = chosen;
   return chosen;
 }
@@ -198,9 +199,18 @@ async function readWithGemini(b64, retry = true) {
   }
   if (res.status === 429) throw err('ocr_quota');
   if (res.status === 404 && retry) {
-    // model renamed/retired since we resolved it: refresh the list once
-    console.warn(`gemini: ${model} returned 404, re-resolving model list`);
-    await resolveGeminiModel(true);
+    // Retired model. Google's message usually names the replacement
+    // ("Please update your code to use models/gemini-3.8-flash"): take it.
+    const text = await res.text().catch(() => '');
+    geminiRetired.add(model);
+    const hinted = (text.match(/use models\/([\w.-]+)/) || [])[1];
+    if (hinted && !geminiRetired.has(hinted)) {
+      console.warn(`gemini: ${model} retired, switching to suggested ${hinted}`);
+      geminiModel = hinted;
+    } else {
+      console.warn(`gemini: ${model} returned 404, re-resolving model list`);
+      await resolveGeminiModel(true);
+    }
     return readWithGemini(b64, false);
   }
   if (res.status === 400 || res.status === 401 || res.status === 403) throw err('ocr_config', { detail: (await res.text().catch(() => '')).slice(0, 300) });
