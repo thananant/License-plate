@@ -55,9 +55,9 @@
             <label>
               <span>สถานะ</span>
               <select name="status" id="s-status">
-                <option value="found">ยังไม่มีคนมารับ</option>
-                <option value="returned">คืนเจ้าของแล้ว</option>
                 <option value="all">ทั้งหมด</option>
+                <option value="found">ยังไม่มีคนมารับ</option>
+                <option value="returned">มีคนแจ้งว่าคืนแล้ว</option>
               </select>
             </label>
           </div>
@@ -166,7 +166,7 @@
 
         <div id="r-success" class="success" hidden>
           <h3>✅ บันทึกแล้ว ขอบคุณที่ช่วยกัน</h3>
-          <p>ป้ายขึ้นบนแผนที่แล้ว เมื่อเจ้าของมารับ ใครก็กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย ไม่ต้องใช้รหัสใด ๆ</p>
+          <p>ป้ายขึ้นบนแผนที่แล้ว เมื่อเจ้าของมารับ หรือป้ายถูกย้ายไปที่อื่น ใครก็กดอัปเดตที่รายการได้เลย ไม่ต้องใช้รหัสใด ๆ</p>
           <details class="tokendetails">
             <summary>รหัสสำหรับแก้ไข/ลบด้วยตัวเอง (ไม่บังคับ)</summary>
             <p class="muted small" style="margin:8px 0">ถ้าอยากลบหรือแก้รายงานนี้เองภายหลัง ให้เก็บรหัสนี้ไว้ ระบบไม่เก็บสำเนา</p>
@@ -207,11 +207,12 @@
           <ul>
             <li>ติดต่อรับตามจุดสังเกตที่ผู้เก็บระบุไว้ นำ<strong>เล่มทะเบียนรถ (หรือสำเนา) และบัตรประชาชน</strong>ไปแสดงว่าเป็นเจ้าของ</li>
             <li>ผู้เก็บป้ายทำหน้าที่คืนของหายตามกฎหมาย ไม่ควรมีการเรียกค่าตอบแทน หากพบการเรียกเงินหรือพฤติกรรมน่าสงสัย อย่าโอนเงิน และแจ้งตำรวจ</li>
-            <li>รับป้ายแล้ว กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการ เพื่อให้คนอื่นไม่ต้องตามหาซ้ำ</li>
+            <li>รับป้ายแล้ว กดปุ่ม "เจ้าของรับไปแล้ว" ที่รายการ เพื่อให้คนอื่นรู้ (รายการยังค้นหาเจอ แค่ติดป้ายไว้)</li>
+            <li>ถ้าเห็นป้ายถูกย้ายไปที่อื่น เช่น ป้อมยาม สถานีตำรวจ อบต. กด "แจ้งว่าป้ายอยู่ที่ไหนตอนนี้" เพื่ออัปเดตให้เจ้าของ</li>
           </ul>
 
           <h4>🔒 ข้อมูลของคุณ</h4>
-          <p class="small">ระบบเก็บเฉพาะเลขทะเบียน จังหวัด รูปป้าย และจุดที่พบ เพื่อคืนป้ายให้เจ้าของเท่านั้น ไม่มีบัญชีผู้ใช้ ไม่บันทึกหมายเลข IP รูปถูกลบข้อมูลตำแหน่ง (GPS) ก่อนบันทึก และรายการที่คืนแล้วถูกลบอัตโนมัติภายใน 30 วัน</p>
+          <p class="small">ระบบเก็บเฉพาะเลขทะเบียน จังหวัด รูปป้าย และจุดที่พบ เพื่อคืนป้ายให้เจ้าของเท่านั้น ไม่มีบัญชีผู้ใช้ ไม่บันทึกหมายเลข IP รูปถูกลบข้อมูลตำแหน่ง (GPS) ก่อนบันทึก</p>
 
           <h4>🔗 แหล่งข้อมูล</h4>
           <ul class="links">
@@ -261,7 +262,7 @@
       </section>
 
       <footer class="panel-foot">
-        <p><strong>ข้อมูลในระบบใช้เพื่อคืนแผ่นป้ายทะเบียนให้เจ้าของเท่านั้น</strong> ห้ามนำไปใช้เพื่อวัตถุประสงค์อื่น รายการที่คืนแล้วจะถูกลบอัตโนมัติภายใน 30 วัน</p>
+        <p><strong>ข้อมูลในระบบใช้เพื่อคืนแผ่นป้ายทะเบียนให้เจ้าของเท่านั้น</strong> ห้ามนำไปใช้เพื่อวัตถุประสงค์อื่น</p>
         <p>ไม่มีสมัครสมาชิก ไม่มีคุกกี้ ไม่มีระบบติดตาม ไม่บันทึกหมายเลข IP รูปถูกลบข้อมูลตำแหน่ง (GPS) ก่อนบันทึก</p>
         <p>ข้อมูลทั้งหมดเป็นสาธารณะ โปรดอย่าใส่ชื่อ เบอร์โทร หรือข้อมูลส่วนตัว · <a href="#admin" id="admin-link">ผู้ดูแล</a></p>
       </footer>
@@ -310,19 +311,24 @@
       <p class="warn small">🪪 <strong>ผู้เก็บป้าย:</strong> ก่อนส่งมอบ ขอดูเล่มทะเบียนรถหรือหลักฐานความเป็นเจ้าของที่เลขทะเบียนตรงกัน และไม่ควรเรียกค่าตอบแทน<br>
       <strong>เจ้าของรถ:</strong> เตรียมเล่มทะเบียนหรือสำเนา พร้อมบัตรประชาชน ไปแสดงตอนรับป้าย</p>
       <div id="d-claim" class="claimbox">
-        <button type="button" class="btn ok block" id="d-claim-open">✅ ป้ายนี้คืนเจ้าของแล้ว</button>
+        <div id="d-returned" class="returned-info" hidden></div>
+        <div class="actions" id="d-claim-buttons" style="margin:8px 0 0">
+          <button type="button" class="btn" id="d-moved-open">📍 แจ้งว่าป้ายอยู่ที่ไหนตอนนี้</button>
+          <button type="button" class="btn ok" id="d-claim-open">✅ เจ้าของรับไปแล้ว</button>
+        </div>
         <form id="claim-form" hidden>
-          <p class="small" style="margin:8px 0">เจ้าของมารับแล้วใช่ไหม? กดยืนยันเพื่อย้ายรายการไปสถานะ "คืนแล้ว" คนอื่นจะได้ไม่ต้องตามหาซ้ำ</p>
+          <input type="hidden" name="kind" id="c-kind" value="returned">
+          <p class="small" id="c-intro" style="margin:8px 0"></p>
           <label><span>รูปยืนยัน (ไม่บังคับ)</span><input type="file" name="photo" id="c-photo" accept="image/*" capture="environment"></label>
-          <label><span>หมายเหตุ (ไม่บังคับ)</span><input name="note" id="c-note" maxlength="200" placeholder="เช่น เจ้าของมารับเมื่อบ่ายนี้"></label>
+          <label><span id="c-note-label">หมายเหตุ (ไม่บังคับ)</span><input name="note" id="c-note" maxlength="200" placeholder="เช่น เจ้าของมารับเมื่อบ่ายนี้"></label>
           <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           <div class="actions" style="margin:0">
-            <button type="submit" class="btn ok" id="c-submit">ยืนยันคืนแล้ว</button>
+            <button type="submit" class="btn ok" id="c-submit">ยืนยัน</button>
             <button type="button" class="btn" id="c-cancel">ยกเลิก</button>
           </div>
           <p id="c-msg" class="msg"></p>
         </form>
-        <div id="d-returned" class="returned-info" hidden></div>
+        <p class="muted small" style="margin:8px 0 0">รายการจะไม่ถูกลบ แม้มีคนกด "รับไปแล้ว" ยังค้นหาเจอเสมอ ถ้าป้ายยังอยู่ ให้แจ้งที่อยู่ล่าสุดได้</p>
       </div>
       <p class="muted small" style="margin-top:10px">รหัสรายงาน: <code id="d-id"></code></p>
     </div>

@@ -106,7 +106,8 @@
       const prov = el('div', 'prov', r.province);
       const sub = el('div', 'sub');
       sub.appendChild(badge(r));
-      sub.appendChild(document.createTextNode(timeAgo(r.created_at) + (r.place_note ? ' · ' + r.place_note : '')));
+      const latest = r.update_kind === 'moved' && r.claim_note ? ' · 📍 ' + r.claim_note : (r.place_note ? ' · ' + r.place_note : '');
+      sub.appendChild(document.createTextNode(timeAgo(r.created_at) + latest));
       li.append(plate, prov, sub);
       if (r.photo) {
         const img = document.createElement('img');
@@ -131,7 +132,7 @@
 
   function badge(r) {
     const span = document.createElement('span');
-    if (r.status === 'returned') { span.className = 'badge returned'; span.textContent = 'คืนแล้ว'; }
+    if (r.status === 'returned') { span.className = 'badge returned'; span.textContent = 'แจ้งว่าคืนแล้ว'; }
     else { span.className = 'badge' + (r.vehicle_type === 'motorcycle' ? ' moto' : ''); span.textContent = TYPE_LABEL[r.vehicle_type] || r.vehicle_type; }
     return span;
   }
@@ -152,7 +153,7 @@
   // ---------- detail ----------
   function openDetail(r) {
     $('#d-plate').textContent = `${r.plate_display} · ${r.province}`;
-    $('#d-meta').textContent = `${TYPE_LABEL[r.vehicle_type] || ''} · ${r.status === 'returned' ? 'คืนเจ้าของแล้ว' : 'ยังไม่มีคนมารับ'} · แจ้งเมื่อ ${new Date(r.created_at).toLocaleString('th-TH')}`;
+    $('#d-meta').textContent = `${TYPE_LABEL[r.vehicle_type] || ''} · ${r.status === 'returned' ? 'มีคนแจ้งว่าคืนแล้ว' : 'ยังไม่มีคนมารับ'} · แจ้งเมื่อ ${new Date(r.created_at).toLocaleString('th-TH')}`;
     const ph = $('#d-photo'); ph.innerHTML = '';
     if (r.photo) { const img = document.createElement('img'); img.src = '/uploads/' + encodeURIComponent(r.photo); img.alt = 'รูปป้ายทะเบียน'; ph.appendChild(img); }
     $('#d-place').textContent = r.place_note ? '📌 ' + r.place_note : '';
@@ -171,42 +172,54 @@
   function renderClaim(r) {
     detailReport = r;
     const form = $('#claim-form'); form.reset(); form.hidden = true; $('#c-msg').textContent = ''; $('#c-msg').className = 'msg';
+    $('#d-claim-buttons').hidden = false;
     const info = $('#d-returned');
-    if (r.status === 'returned') {
-      $('#d-claim-open').hidden = true;
-      info.hidden = false; info.innerHTML = '';
-      info.append('✅ คืนเจ้าของแล้ว' + (r.claimed_at ? ' เมื่อ ' + new Date(r.claimed_at).toLocaleString('th-TH') : ''));
+    info.hidden = true; info.innerHTML = ''; info.classList.remove('moved');
+    if (r.update_kind || r.status === 'returned') {
+      info.hidden = false;
+      const when = r.claimed_at ? ' เมื่อ ' + new Date(r.claimed_at).toLocaleString('th-TH') : '';
+      if (r.status === 'returned') info.append('✅ มีคนแจ้งว่าเจ้าของรับไปแล้ว' + when);
+      else { info.classList.add('moved'); info.append('📍 อัปเดตล่าสุด' + when); }
       if (r.claim_note) { const m = document.createElement('span'); m.className = 'muted'; m.textContent = r.claim_note; info.appendChild(m); }
-      if (r.claim_photo) { const img = document.createElement('img'); img.src = '/uploads/' + encodeURIComponent(r.claim_photo); img.alt = 'รูปยืนยันการคืน'; info.appendChild(img); }
-    } else {
-      $('#d-claim-open').hidden = false;
-      info.hidden = true;
+      if (r.claim_photo) { const img = document.createElement('img'); img.src = '/uploads/' + encodeURIComponent(r.claim_photo); img.alt = 'รูปอัปเดต'; info.appendChild(img); }
+      if (r.status === 'returned') { const m = document.createElement('span'); m.className = 'muted'; m.textContent = 'ถ้าป้ายยังอยู่จริง กด "แจ้งว่าป้ายอยู่ที่ไหนตอนนี้" เพื่อแก้ไข'; info.appendChild(m); }
     }
+    $('#d-claim-open').hidden = r.status === 'returned';
   }
-  $('#d-claim-open').addEventListener('click', () => { $('#claim-form').hidden = false; $('#d-claim-open').hidden = true; });
-  $('#c-cancel').addEventListener('click', () => { $('#claim-form').hidden = true; $('#d-claim-open').hidden = false; });
+  function openClaimForm(kind) {
+    $('#c-kind').value = kind;
+    $('#c-intro').textContent = kind === 'returned'
+      ? 'เจ้าของมารับแล้วใช่ไหม? รายการจะติดป้าย "รับไปแล้ว" แต่ยังค้นหาเจอ เพื่อให้คนอื่นรู้ว่าไม่ต้องตามหาซ้ำ'
+      : 'ป้ายยังอยู่ หรือถูกย้ายไปที่ไหน? บอกจุดที่อยู่ล่าสุดเพื่อให้เจ้าของตามไปรับได้';
+    $('#c-note-label').textContent = kind === 'returned' ? 'หมายเหตุ (ไม่บังคับ)' : 'ป้ายอยู่ที่ไหนตอนนี้ *';
+    $('#c-note').placeholder = kind === 'returned' ? 'เช่น เจ้าของมารับเมื่อบ่ายนี้' : 'เช่น ย้ายไปฝากไว้ที่ป้อมยามหมู่บ้าน / ยังอยู่ที่เดิม';
+    $('#c-note').required = kind !== 'returned';
+    $('#c-submit').textContent = kind === 'returned' ? 'ยืนยันรับไปแล้ว' : 'บันทึกที่อยู่ล่าสุด';
+    $('#claim-form').hidden = false; $('#d-claim-buttons').hidden = true;
+    $('#c-note').focus();
+  }
+  $('#d-claim-open').addEventListener('click', () => openClaimForm('returned'));
+  $('#d-moved-open').addEventListener('click', () => openClaimForm('moved'));
+  $('#c-cancel').addEventListener('click', () => { $('#claim-form').hidden = true; $('#d-claim-buttons').hidden = false; });
   $('#claim-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!detailReport) return;
     const btn = $('#c-submit'); const msg = $('#c-msg');
+    const label = btn.textContent;
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; msg.className = 'msg'; msg.textContent = '';
     try {
       const fd = new FormData($('#claim-form'));
       const updated = await api('/api/reports/' + encodeURIComponent(detailReport.id) + '/claim', { method: 'POST', body: fd });
       renderClaim(updated);
-      $('#d-meta').textContent = $('#d-meta').textContent.replace('ยังไม่มีคนมารับ', 'คืนเจ้าของแล้ว');
+      $('#d-meta').textContent = $('#d-meta').textContent.replace(/(ยังไม่มีคนมารับ|มีคนแจ้งว่าคืนแล้ว)/, updated.status === 'returned' ? 'มีคนแจ้งว่าคืนแล้ว' : 'ยังไม่มีคนมารับ');
       runSearch();
     } catch (err) {
       msg.className = 'msg err';
       msg.textContent = err.status === 429 ? 'ทำรายการบ่อยเกินไป กรุณารอสักครู่' : ERR[err.message] || 'บันทึกไม่สำเร็จ กรุณาลองใหม่';
     } finally {
-      btn.disabled = false; btn.textContent = 'ยืนยันคืนแล้ว';
+      btn.disabled = false; btn.textContent = label;
     }
   });
-  async function copy(text, btn) {
-    try { await navigator.clipboard.writeText(text); if (btn) { const t = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => (btn.textContent = t), 1500); } }
-    catch { window.prompt('คัดลอกข้อความนี้', text); }
-  }
 
   // ---------- report: location ----------
   function setDraft(p, { accuracy = null, pan = false, fromInput = false } = {}) {

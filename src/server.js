@@ -34,9 +34,10 @@ const TRUST_PROXY = String(process.env.TRUST_PROXY || 'false') === 'true';
 const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
 
-const RETURNED_TTL_DAYS = Number(process.env.RETURNED_TTL_DAYS || 30);
-// Unclaimed reports are dropped after this long (0 = keep forever).
-const FOUND_TTL_DAYS = Number(process.env.FOUND_TTL_DAYS || 180);
+// Automatic deletion is OFF by default (0): a false "returned" click must not
+// make a plate disappear. Moderators delete spam by hand.
+const RETURNED_TTL_DAYS = Number(process.env.RETURNED_TTL_DAYS || 0);
+const FOUND_TTL_DAYS = Number(process.env.FOUND_TTL_DAYS || 0);
 // A report must carry a photo taken in-app (set "false" to allow text-only reports).
 const PHOTO_REQUIRED = String(process.env.PHOTO_REQUIRED ?? 'true') !== 'false';
 // Same/near-same photo re-submitted within this window is rejected as a duplicate.
@@ -211,7 +212,8 @@ app.get('/api/reports', readLimiter, (req, res) => {
   const plate = normalizePlate(String(q.plate ?? ''));
   const province = PROVINCE_SET.has(String(q.province ?? '')) ? String(q.province) : null;
   const vehicleType = VEHICLE_TYPES.includes(String(q.type ?? '')) ? String(q.type) : null;
-  const status = ['found', 'returned'].includes(String(q.status ?? '')) ? String(q.status) : (q.status === 'all' ? null : 'found');
+  // Default shows everything (returned ones sort last) so nothing is hidden by a wrong click.
+  const status = ['found', 'returned'].includes(String(q.status ?? '')) ? String(q.status) : null;
 
   let bbox = null;
   if (typeof q.bbox === 'string') {
@@ -390,12 +392,16 @@ app.post('/api/reports/:id/claim', writeLimiter, (req, res, next) => {
   if (req.body?.website) return res.status(400).json({ error: 'rejected' });
   const row = store.byId(String(req.params.id));
   if (!row) return res.status(404).json({ error: 'not_found' });
-  if (row.status === 'returned') return res.json(toPublic(row));
+  const kind = String(req.body?.kind || 'returned');
+  if (!['returned', 'moved'].includes(kind)) return res.status(400).json({ error: 'validation' });
+  const note = cleanText(req.body?.note, MAX_PLACE_NOTE);
+  if (kind === 'moved' && !note && !req.file) return res.status(400).json({ error: 'validation', fields: { note: 'required' } });
   let photo = null;
   if (req.file) {
     try { photo = await processPhoto(req.file.buffer); } catch { return res.status(400).json({ error: 'bad_image' }); }
   }
-  store.claim(row.id, { note: cleanText(req.body?.note, MAX_PLACE_NOTE), photo });
+  await removePhoto(row.claim_photo);
+  store.claim(row.id, { kind, note, photo });
   res.json(toPublic(store.byId(row.id)));
 });
 
@@ -489,8 +495,9 @@ app.use((err, _req, res, _next) => {
 
 // Housekeeping: drop returned reports (and their photos) after the TTL.
 async function purge() {
+  if (RETURNED_TTL_DAYS <= 0 && FOUND_TTL_DAYS <= 0) return;
   try {
-    const rows = store.purgeReturned(RETURNED_TTL_DAYS * 86_400_000);
+    const rows = RETURNED_TTL_DAYS > 0 ? store.purgeReturned(RETURNED_TTL_DAYS * 86_400_000) : [];
     if (FOUND_TTL_DAYS > 0) rows.push(...store.purgeStale(FOUND_TTL_DAYS * 86_400_000));
     for (const r of rows) { await removePhoto(r.photo); await removePhoto(r.claim_photo); }
   } catch { /* ignore */ }

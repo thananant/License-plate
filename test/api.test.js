@@ -106,11 +106,11 @@ test('create, search, photo metadata stripped, manage, delete', async () => {
   assert.equal(r.status, 200);
   assert.equal((await r.json()).status, 'returned');
 
-  // default search hides returned
+  // default search still shows returned reports (a wrong click must not hide a plate)
   r = await fetch(BASE + '/api/reports?plate=1234');
-  assert.equal((await r.json()).count, 0);
-  r = await fetch(BASE + '/api/reports?plate=1234&status=all');
   assert.equal((await r.json()).count, 1);
+  r = await fetch(BASE + '/api/reports?plate=1234&status=found');
+  assert.equal((await r.json()).count, 0);
 
   // delete
   r = await fetch(BASE + '/api/reports/' + report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
@@ -175,11 +175,24 @@ test('anyone can mark a report returned via claim; admin can revert', async () =
   r = await fetch(BASE + '/api/reports/' + report.id + '/claim', { method: 'POST', body: hp });
   assert.equal(r.status, 400);
 
-  // hidden from default search, visible with status=returned
+  // still visible by default; filterable by status
   r = await fetch(BASE + '/api/reports?plate=55');
-  assert.equal((await r.json()).count, 0);
+  assert.equal((await r.json()).count, 1);
   r = await fetch(BASE + '/api/reports?plate=55&status=returned');
   assert.equal((await r.json()).count, 1);
+
+  // anyone can correct a wrong "returned" by reporting where the plate is now
+  const mv = new FormData(); mv.set('kind', 'moved'); mv.set('note', 'ยังอยู่ที่เดิม ย้ายไปป้อมยาม');
+  r = await fetch(BASE + '/api/reports/' + report.id + '/claim', { method: 'POST', body: mv });
+  assert.equal(r.status, 200);
+  const back = await r.json();
+  assert.equal(back.status, 'found');
+  assert.equal(back.update_kind, 'moved');
+  assert.equal(back.claim_note, 'ยังอยู่ที่เดิม ย้ายไปป้อมยาม');
+  // "moved" without a note is rejected
+  const empty = new FormData(); empty.set('kind', 'moved');
+  r = await fetch(BASE + '/api/reports/' + report.id + '/claim', { method: 'POST', body: empty });
+  assert.equal(r.status, 400);
 
   // admin reverts
   r = await fetch(BASE + '/api/reports/' + report.id, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123', status: 'found' }) });

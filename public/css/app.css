@@ -300,3 +300,5 @@ body.cam-open { overflow: hidden; }
 .danger-zone strong { color: var(--danger); display: block; margin-bottom: 4px; }
 .results .admin-row { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 6px; }
 .admin-badge { position: fixed; left: 12px; bottom: 12px; z-index: 40; background: var(--ink); color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 999px; box-shadow: var(--shadow); }
+
+.returned-info.moved { background: var(--yellow-soft); color: #7a5a00; }

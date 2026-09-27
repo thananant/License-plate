@@ -34,7 +34,7 @@ export function openDatabase(dataDir) {
 
   // Lightweight migrations for databases created before these columns existed.
   const cols = new Set(db.prepare('PRAGMA table_info(reports)').all().map((c) => c.name));
-  for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER'], ['photo_hash', 'TEXT']]) {
+  for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER'], ['photo_hash', 'TEXT'], ['update_kind', 'TEXT']]) {
     if (!cols.has(name)) db.exec(`ALTER TABLE reports ADD COLUMN ${name} ${type}`);
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_reports_photo_hash ON reports(photo_hash)');
@@ -48,7 +48,10 @@ export function openDatabase(dataDir) {
     `),
     byId: db.prepare(`SELECT * FROM reports WHERE id = ?`),
     setStatus: db.prepare(`UPDATE reports SET status = ?, updated_at = ? WHERE id = ?`),
-    claim: db.prepare(`UPDATE reports SET status = 'returned', claim_note = @claim_note, claim_photo = @claim_photo,
+    // Latest public update on a report: kind = 'returned' (owner collected it)
+    // or 'moved' (plate is now somewhere else / still there). 'moved' keeps the
+    // report active so a false "returned" can be corrected by anyone.
+    claim: db.prepare(`UPDATE reports SET status = @status, update_kind = @kind, claim_note = @claim_note, claim_photo = @claim_photo,
       claimed_at = @now, updated_at = @now WHERE id = @id`),
     expired: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'returned' AND updated_at < ?`),
     stale: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'found' AND created_at < ?`),
@@ -62,7 +65,7 @@ export function openDatabase(dataDir) {
   };
 
   const PUBLIC_COLS = `id, plate_display, province, vehicle_type, lat, lng, accuracy_m,
-    place_note, note, photo, status, claim_note, claim_photo, claimed_at, created_at, updated_at`;
+    place_note, note, photo, status, update_kind, claim_note, claim_photo, claimed_at, created_at, updated_at`;
 
   function search({ plate, province, vehicleType, status, bbox, limit = 200 }) {
     const where = [];
@@ -90,7 +93,7 @@ export function openDatabase(dataDir) {
     }
     const sql = `SELECT ${PUBLIC_COLS} FROM reports
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY created_at DESC LIMIT @limit`;
+      ORDER BY (status = 'returned') ASC, created_at DESC LIMIT @limit`;
     params.limit = limit;
     return db.prepare(sql).all(params);
   }
@@ -104,7 +107,7 @@ export function openDatabase(dataDir) {
     photoInUse: (name) => !!name && stmts.photoRefs.get(name, name).n > 0,
     byId: (id) => stmts.byId.get(id),
     setStatus: (id, status) => stmts.setStatus.run(status, Date.now(), id),
-    claim: (id, { note, photo }) => stmts.claim.run({ id, claim_note: note, claim_photo: photo, now: Date.now() }),
+    claim: (id, { kind, note, photo }) => stmts.claim.run({ id, kind, status: kind === 'returned' ? 'returned' : 'found', claim_note: note, claim_photo: photo, now: Date.now() }),
     /** Returned reports older than `olderThanMs` are deleted; returns rows so the caller can unlink photos. */
     purgeReturned: (olderThanMs) => {
       const rows = stmts.expired.all(Date.now() - olderThanMs);
