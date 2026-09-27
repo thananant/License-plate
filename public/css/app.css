@@ -212,8 +212,9 @@ dialog::backdrop { background: rgba(60, 20, 10, .45); backdrop-filter: blur(2px)
 @media (max-width: 800px) {
   .topbar { flex-wrap: wrap; padding: 10px 14px; gap: 10px; }
   .brand p { white-space: normal; }
-  .tabs { width: 100%; }
-  .tab { flex: 1; padding: 10px 8px; font-size: 13.5px; }
+  .tabs { width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 1 0 auto; padding: 9px 11px; font-size: 13px; }
   .layout { grid-template-columns: 1fr; grid-template-rows: 42dvh 1fr; }
   .mapwrap { order: -1; }
   .panel { border-right: 0; border-radius: 20px 20px 0 0; margin-top: -18px; z-index: 2; box-shadow: 0 -8px 24px rgba(120,50,30,.12); }
@@ -302,3 +303,40 @@ body.cam-open { overflow: hidden; }
 .admin-badge { position: fixed; left: 12px; bottom: 12px; z-index: 40; background: var(--ink); color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 999px; box-shadow: var(--shadow); }
 
 .returned-info.moved { background: var(--yellow-soft); color: #7a5a00; }
+
+/* ============ stats ============ */
+.stats h4 { margin: 18px 0 8px; font-size: 14.5px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { background: var(--white); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; }
+.tile-label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.tile-value { font-size: 30px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile.hero { grid-column: 1 / -1; background: linear-gradient(120deg, var(--red-dark), var(--red)); border-color: transparent; color: #fff; }
+.tile.hero .tile-label { color: rgba(255,255,255,.85); }
+.tile.hero .tile-value { font-size: 40px; }
+.tile.wait .tile-value { color: var(--red-dark); }
+.tile.done .tile-value { color: var(--ok); }
+.progress-wrap { margin-top: 12px; }
+.progress-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+.progress { height: 10px; background: var(--cream-2); border-radius: 999px; overflow: hidden; }
+.progress-bar { height: 100%; width: 0; background: var(--ok); border-radius: 999px; transition: width .4s; }
+.bars { display: grid; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 8px; font-size: 13px; }
+.bar-row .name { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row .track { height: 14px; background: var(--cream-2); border-radius: 4px; overflow: hidden; display: flex; gap: 2px; }
+.bar-row .seg { height: 100%; }
+.bar-row .seg.wait { background: var(--red); border-radius: 4px 0 0 4px; }
+.bar-row .seg.done { background: var(--ok); }
+.bar-row .seg:last-child { border-radius: 0 4px 4px 0; }
+.bar-row .seg:only-child { border-radius: 4px; }
+.bar-row .val { font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 2ch; text-align: right; }
+.daily { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; height: 120px; align-items: end; border-bottom: 1.5px solid var(--line); padding-bottom: 4px; }
+.daily .day { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 2px; position: relative; }
+.daily .day .b { width: 100%; border-radius: 4px 4px 0 0; min-height: 0; }
+.daily .day .b.wait { background: var(--red); }
+.daily .day .b.done { background: var(--ok); }
+.daily .day:hover::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; z-index: 2; }
+.daily-labels { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; font-size: 10px; color: var(--ink-2); text-align: center; margin-top: 4px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.legend .sw.wait { background: var(--red); } .legend .sw.done { background: var(--ok); }
+.stats .empty { margin-top: 6px; }

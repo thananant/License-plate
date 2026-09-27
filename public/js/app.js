@@ -23,6 +23,7 @@
       b.setAttribute('aria-selected', String(on));
     });
     $$('.tabpane').forEach((p) => p.classList.toggle('active', p.dataset.pane === name));
+    if (name === 'stats') loadStats();
     $('#crosshair').hidden = name !== 'report';
     if (map) map.setDraft(name === 'report' ? draft : null, onDraftMove);
     if (name !== 'report' && map) map.setAccuracyCircle(null);
@@ -534,6 +535,70 @@
     $('#r-locstatus').textContent = 'ยังไม่ได้ปักหมุด'; $('#r-locstatus').className = 'muted';
     $('#report-form').hidden = false; $('#r-success').hidden = true;
   });
+
+  // ---------- stats ----------
+  const fmtN = (n) => Number(n || 0).toLocaleString('th-TH');
+  async function loadStats() {
+    let st;
+    try { st = await api('/api/stats'); } catch { $('#st-updated').textContent = 'โหลดสถิติไม่สำเร็จ'; return; }
+    $('#st-total').textContent = fmtN(st.total);
+    $('#st-found').textContent = fmtN(st.found);
+    $('#st-returned').textContent = fmtN(st.returned);
+    $('#st-24h').textContent = fmtN(st.last24h);
+    const wrap = $('#st-progress');
+    if (st.total > 0) {
+      const rate = Math.round((st.returned / st.total) * 100);
+      wrap.hidden = false; $('#st-rate').textContent = rate + '%'; $('#st-rate-bar').style.width = rate + '%';
+    } else wrap.hidden = true;
+
+    const barRows = (el, rows) => {
+      el.innerHTML = '';
+      if (!rows.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'ยังไม่มีข้อมูล'; el.appendChild(e); return; }
+      const max = Math.max(...rows.map((r) => r.total)) || 1;
+      rows.forEach((r) => {
+        const row = document.createElement('div'); row.className = 'bar-row';
+        row.title = `${r.name}: รอเจ้าของ ${fmtN(r.found)} · คืนแล้ว ${fmtN(r.returned)}`;
+        const name = el2('span', 'name', r.name);
+        const track = el2('div', 'track');
+        const w = (r.total / max) * 100;
+        if (r.found) { const a = el2('div', 'seg wait'); a.style.width = (w * r.found / r.total) + '%'; track.appendChild(a); }
+        if (r.returned) { const b = el2('div', 'seg done'); b.style.width = (w * r.returned / r.total) + '%'; track.appendChild(b); }
+        row.append(name, track, el2('span', 'val', fmtN(r.total)));
+        el.appendChild(row);
+      });
+    };
+    barRows($('#st-type'), [
+      { name: 'รถยนต์', total: st.car, found: 0, returned: 0 },
+      { name: 'มอเตอร์ไซค์', total: st.motorcycle, found: 0, returned: 0 },
+      { name: 'อื่น ๆ', total: st.other, found: 0, returned: 0 },
+    ].filter((r) => r.total > 0).map((r) => ({ ...r, found: r.total })));
+    barRows($('#st-province'), st.byProvince.map((p) => ({ name: p.province, total: p.total, found: p.found, returned: p.returned })));
+
+    // 14-day columns: reports per day (red) and returns per day (green)
+    const daily = $('#st-daily'); daily.innerHTML = '';
+    const days = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() + 7 * 3600_000 - i * 86_400_000); // Thai calendar day
+      days.push(d.toISOString().slice(0, 10));
+    }
+    const found = Object.fromEntries(st.daily.map((r) => [r.day, r.count]));
+    const done = Object.fromEntries(st.returnedDaily.map((r) => [r.day, r.count]));
+    const max = Math.max(1, ...days.map((d) => (found[d] || 0) + (done[d] || 0)));
+    days.forEach((d) => {
+      const col = el2('div', 'day');
+      const f = found[d] || 0, r = done[d] || 0;
+      col.dataset.tip = `${d.slice(8)}/${d.slice(5, 7)}: แจ้ง ${f} · คืน ${r}`;
+      if (r) { const b = el2('div', 'b done'); b.style.height = (r / max) * 100 + '%'; col.appendChild(b); }
+      if (f) { const b = el2('div', 'b wait'); b.style.height = (f / max) * 100 + '%'; col.appendChild(b); }
+      daily.appendChild(col);
+    });
+    let labels = daily.nextElementSibling;
+    if (!labels || !labels.classList.contains('daily-labels')) { labels = el2('div', 'daily-labels'); daily.after(labels); }
+    labels.innerHTML = '';
+    days.forEach((d, i) => { const l = el2('span', '', i % 3 === 0 ? `${+d.slice(8)}/${+d.slice(5, 7)}` : ''); labels.appendChild(l); });
+    $('#st-updated').textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH') + ' · สถิติจากรายการทั้งหมดในระบบ';
+  }
+  function el2(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
   // ---------- admin mode (token kept in memory only) ----------
   let adminToken = null;

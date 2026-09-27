@@ -23,6 +23,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="search" role="tab" aria-selected="true">🔍 ค้นหาป้าย</button>
       <button class="tab" data-tab="report" role="tab" aria-selected="false">📍 แจ้งพบป้าย</button>
+      <button class="tab" data-tab="stats" role="tab" aria-selected="false">📊 สถิติ</button>
       <button class="tab" data-tab="help" role="tab" aria-selected="false">❓ หาไม่เจอทำไง</button>
     </nav>
   </header>
@@ -176,6 +177,34 @@
           <div class="actions">
             <button type="button" class="btn primary" id="ok-another">แจ้งป้ายอีกแผ่น</button>
           </div>
+        </div>
+      </section>
+
+      <!-- ===== STATS ===== -->
+      <section class="tabpane" data-pane="stats">
+        <div class="stats">
+          <div class="tiles">
+            <div class="tile hero"><span class="tile-label">ป้ายที่มีคนเจอทั้งหมด</span><span class="tile-value" id="st-total">–</span></div>
+            <div class="tile wait"><span class="tile-label">รอเจ้าของมารับ</span><span class="tile-value" id="st-found">–</span></div>
+            <div class="tile done"><span class="tile-label">กลับถึงมือเจ้าของแล้ว</span><span class="tile-value" id="st-returned">–</span></div>
+            <div class="tile"><span class="tile-label">แจ้งใน 24 ชั่วโมง</span><span class="tile-value" id="st-24h">–</span></div>
+          </div>
+          <div class="progress-wrap" id="st-progress" hidden>
+            <div class="progress-head"><span>อัตราคืนเจ้าของ</span><strong id="st-rate">–</strong></div>
+            <div class="progress"><div class="progress-bar" id="st-rate-bar"></div></div>
+          </div>
+
+          <h4>ตามประเภทรถ</h4>
+          <div class="bars" id="st-type"></div>
+
+          <h4>ตามจังหวัดบนป้าย <span class="muted small">(สูงสุด 12 จังหวัด)</span></h4>
+          <div class="bars" id="st-province"></div>
+
+          <h4>14 วันล่าสุด <span class="muted small">แจ้งพบ / คืนแล้ว ต่อวัน</span></h4>
+          <div class="daily" id="st-daily"></div>
+          <div class="legend"><span><i class="sw wait"></i> แจ้งพบ</span><span><i class="sw done"></i> คืนเจ้าของแล้ว</span></div>
+
+          <p class="muted small" id="st-updated"></p>
         </div>
       </section>
 

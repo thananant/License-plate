@@ -287,3 +287,12 @@ test('same plate reported twice is flagged unless allowed', async () => {
   r = await fetch(BASE + '/api/reports', { method: 'POST', body: mk({ lat: '18.581', allowDuplicate: '1' }) });
   assert.equal(r.status, 201);
 });
+
+test('stats endpoint', async () => {
+  const r = await fetch(BASE + '/api/stats');
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(typeof j.total === 'number' && j.total >= 0);
+  assert.ok(Array.isArray(j.byProvince) && Array.isArray(j.daily));
+  assert.equal(j.found + j.returned, j.total);
+});

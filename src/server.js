@@ -207,6 +207,13 @@ app.get('/api/config', readLimiter, (_req, res) => {
   });
 });
 
+// Public statistics. Cached briefly since it scans the table.
+let statsCache = { at: 0, data: null };
+app.get('/api/stats', readLimiter, (_req, res) => {
+  if (Date.now() - statsCache.at > 30_000) statsCache = { at: Date.now(), data: store.stats() };
+  res.json(statsCache.data);
+});
+
 app.get('/api/reports', readLimiter, (req, res) => {
   const q = req.query;
   const plate = normalizePlate(String(q.plate ?? ''));

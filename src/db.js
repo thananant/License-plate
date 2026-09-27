@@ -125,6 +125,26 @@ export function openDatabase(dataDir) {
     activeByPlate: (plateNorm, province) => stmts.activeByPlate.all(plateNorm, province),
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
+    stats: () => {
+      const now = Date.now();
+      const totals = db.prepare(`SELECT
+          COUNT(*) AS total,
+          SUM(status = 'found') AS found,
+          SUM(status = 'returned') AS returned,
+          SUM(created_at > ?) AS last24h,
+          SUM(created_at > ?) AS last7d,
+          SUM(vehicle_type = 'car') AS car,
+          SUM(vehicle_type = 'motorcycle') AS motorcycle,
+          SUM(vehicle_type = 'other') AS other
+        FROM reports`).get(now - 86_400_000, now - 7 * 86_400_000);
+      const byProvince = db.prepare(`SELECT province, COUNT(*) AS total, SUM(status = 'found') AS found, SUM(status = 'returned') AS returned
+        FROM reports GROUP BY province ORDER BY total DESC, province LIMIT 12`).all();
+      const daily = db.prepare(`SELECT date(created_at / 1000, 'unixepoch', '+7 hours') AS day, COUNT(*) AS count
+        FROM reports WHERE created_at > ? GROUP BY day ORDER BY day`).all(now - 14 * 86_400_000);
+      const returnedDaily = db.prepare(`SELECT date(claimed_at / 1000, 'unixepoch', '+7 hours') AS day, COUNT(*) AS count
+        FROM reports WHERE status = 'returned' AND claimed_at > ? GROUP BY day ORDER BY day`).all(now - 14 * 86_400_000);
+      return { ...totals, byProvince, daily, returnedDaily };
+    },
     /** Delete every report; returns the photo file names that were referenced. */
     wipe: () => {
       const files = stmts.allFiles.all().flatMap((r) => [r.photo, r.claim_photo]).filter(Boolean);
