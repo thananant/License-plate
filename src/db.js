@@ -51,6 +51,8 @@ export function openDatabase(dataDir) {
     claim: db.prepare(`UPDATE reports SET status = 'returned', claim_note = @claim_note, claim_photo = @claim_photo,
       claimed_at = @now, updated_at = @now WHERE id = @id`),
     expired: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'returned' AND updated_at < ?`),
+    stale: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'found' AND created_at < ?`),
+    activeByPlate: db.prepare(`SELECT id, plate_display, province, lat, lng, created_at FROM reports WHERE plate_norm = ? AND province = ? AND status = 'found'`),
     recentHashes: db.prepare(`SELECT id, photo_hash, plate_display, province FROM reports WHERE photo_hash IS NOT NULL AND created_at > ?`),
     photoRefs: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE photo = ? OR claim_photo = ?`),
     allFiles: db.prepare(`SELECT photo, claim_photo FROM reports`),
@@ -110,6 +112,14 @@ export function openDatabase(dataDir) {
       del(rows.map((r) => r.id));
       return rows;
     },
+    /** Unclaimed reports older than `olderThanMs` are deleted (nobody came for months). */
+    purgeStale: (olderThanMs) => {
+      const rows = stmts.stale.all(Date.now() - olderThanMs);
+      const del = db.transaction((ids) => ids.forEach((id) => stmts.delete.run(id)));
+      del(rows.map((r) => r.id));
+      return rows;
+    },
+    activeByPlate: (plateNorm, province) => stmts.activeByPlate.all(plateNorm, province),
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
     /** Delete every report; returns the photo file names that were referenced. */

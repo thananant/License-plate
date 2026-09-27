@@ -261,3 +261,16 @@ test('admin verify and wipe', async () => {
   r = await fetch(BASE + '/api/reports?status=all');
   assert.equal((await r.json()).count, 0);
 });
+
+test('same plate reported twice is flagged unless allowed', async () => {
+  const mk = (extra = {}) => { const fd = new FormData(); fd.set('plate', 'ญญ 4321'); fd.set('province', 'ลำพูน'); fd.set('vehicleType', 'car'); fd.set('lat', '18.58'); fd.set('lng', '99.01'); for (const [k, v] of Object.entries(extra)) fd.set(k, v); return fd; };
+  let r = await fetch(BASE + '/api/reports', { method: 'POST', body: mk() });
+  assert.equal(r.status, 201);
+  r = await fetch(BASE + '/api/reports', { method: 'POST', body: mk({ lat: '18.581' }) });
+  assert.equal(r.status, 409);
+  const j = await r.json();
+  assert.equal(j.error, 'duplicate_plate');
+  assert.ok(j.existing[0].distance_m > 50 && j.existing[0].distance_m < 200);
+  r = await fetch(BASE + '/api/reports', { method: 'POST', body: mk({ lat: '18.581', allowDuplicate: '1' }) });
+  assert.equal(r.status, 201);
+});

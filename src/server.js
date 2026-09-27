@@ -35,6 +35,8 @@ const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
 
 const RETURNED_TTL_DAYS = Number(process.env.RETURNED_TTL_DAYS || 30);
+// Unclaimed reports are dropped after this long (0 = keep forever).
+const FOUND_TTL_DAYS = Number(process.env.FOUND_TTL_DAYS || 180);
 // A report must carry a photo taken in-app (set "false" to allow text-only reports).
 const PHOTO_REQUIRED = String(process.env.PHOTO_REQUIRED ?? 'true') !== 'false';
 // Same/near-same photo re-submitted within this window is rejected as a duplicate.
@@ -42,7 +44,7 @@ const DUPLICATE_WINDOW_DAYS = Number(process.env.DUPLICATE_WINDOW_DAYS || 90);
 const DUPLICATE_MAX_DISTANCE = 6; // hamming bits out of 64
 const MAX_PLATES_PER_REPORT = 20;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
-const MAX_PHOTO_EDGE = 1600;
+const MAX_PHOTO_EDGE = 1280; // ~100-200 KB per photo after re-encoding
 const MAX_NOTE = 500;
 const MAX_PLACE_NOTE = 200;
 
@@ -128,6 +130,13 @@ function cleanText(v, max) {
   return s.slice(0, max);
 }
 
+function distanceM(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 function parseCoord(v, min, max) {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim());
   if (!Number.isFinite(n) || n < min || n > max) return null;
@@ -166,7 +175,7 @@ async function processPhoto(buffer) {
   await sharp(buffer, { failOn: 'error', limitInputPixels: 40_000_000 })
     .rotate() // apply EXIF orientation before metadata is dropped
     .resize({ width: MAX_PHOTO_EDGE, height: MAX_PHOTO_EDGE, fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 82, mozjpeg: true })
+    .jpeg({ quality: 78, mozjpeg: true })
     .toFile(path.join(UPLOAD_DIR, name));
   return name;
 }
@@ -272,6 +281,19 @@ app.post('/api/reports', writeLimiter, (req, res, next) => {
   const keys = new Set();
   for (const p of parsed) { const k = p.plateNorm + '|' + p.province; if (keys.has(k)) errors.plate = 'duplicate'; keys.add(k); }
   if (Object.keys(errors).length) return res.status(400).json({ error: 'validation', fields: errors });
+
+  // Same plate already listed and not yet returned: usually a duplicate
+  // report of the same physical plate. The client can override (a car has a
+  // front and a back plate) by sending allowDuplicate=1.
+  if (b.allowDuplicate !== '1') {
+    const existing = [];
+    for (const p of parsed) {
+      for (const r of store.activeByPlate(p.plateNorm, p.province)) {
+        existing.push({ id: r.id, plate_display: r.plate_display, province: r.province, created_at: r.created_at, distance_m: Math.round(distanceM(lat, lng, r.lat, r.lng)) });
+      }
+    }
+    if (existing.length) return res.status(409).json({ error: 'duplicate_plate', existing: existing.slice(0, 5) });
+  }
 
   let photo = null;
   let photoHash = null;
@@ -469,6 +491,7 @@ app.use((err, _req, res, _next) => {
 async function purge() {
   try {
     const rows = store.purgeReturned(RETURNED_TTL_DAYS * 86_400_000);
+    if (FOUND_TTL_DAYS > 0) rows.push(...store.purgeStale(FOUND_TTL_DAYS * 86_400_000));
     for (const r of rows) { await removePhoto(r.photo); await removePhoto(r.claim_photo); }
   } catch { /* ignore */ }
 }

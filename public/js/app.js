@@ -450,10 +450,15 @@
 
     if (cfg.photoRequired && !capturedPhoto) { showError('กรุณาถ่ายรูปป้ายก่อน (ขั้นที่ 1) รับเฉพาะรูปที่ถ่ายจากกล้องในแอป'); $('#r-shoot').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
+    await submitReport(rows, false);
+  });
+
+  async function submitReport(rows, allowDuplicate) {
     const form = $('#report-form');
     const btn = $('#r-submit'); btn.disabled = true; btn.textContent = rows.length > 1 ? `กำลังส่ง ${rows.length} แผ่น…` : 'กำลังส่ง…';
     try {
       const fd = new FormData();
+      if (allowDuplicate) fd.set('allowDuplicate', '1');
       fd.set('plates', JSON.stringify(rows.map((r) => ({ plate: r.plate, province: r.province, vehicleType: r.vehicleType }))));
       fd.set('lat', fmt7(draft.lat)); fd.set('lng', fmt7(draft.lng));
       fd.set('accuracy', $('#r-accuracy').value); fd.set('placeNote', $('#r-place').value); fd.set('note', $('#r-note').value);
@@ -465,6 +470,16 @@
       runSearch();
     } catch (err) {
       let msg = ERR[err.message] || 'ส่งไม่สำเร็จ กรุณาลองใหม่';
+      if (err.message === 'duplicate_plate') {
+        const ex = err.body?.existing || [];
+        const lines = ex.map((e) => `• ${e.plate_display} ${e.province} · แจ้งไว้ ${timeAgo(e.created_at)} · ห่างจากจุดนี้ ${e.distance_m < 1000 ? e.distance_m + ' ม.' : (e.distance_m / 1000).toFixed(1) + ' กม.'}`).join('\n');
+        const again = window.confirm(`มีป้ายเลขนี้แจ้งไว้แล้วในระบบ:\n${lines}\n\nถ้าเป็นแผ่นเดียวกัน ไม่ต้องแจ้งซ้ำ กด "ยกเลิก"\nถ้าเป็นอีกแผ่นของรถคันเดียวกัน (ป้ายหน้า/หลัง) กด "ตกลง" เพื่อแจ้งเพิ่ม`);
+        btn.disabled = false; btn.textContent = 'ส่งรายงาน';
+        if (again) return submitReport(rows, true);
+        showError('ไม่ได้ส่ง: ป้ายนี้มีในระบบแล้ว');
+        if (ex[0]) { const a = document.createElement('a'); a.href = '#'; a.textContent = ' ดูรายการเดิม'; a.onclick = (ev) => { ev.preventDefault(); api('/api/reports/' + encodeURIComponent(ex[0].id)).then(openDetail).catch(() => {}); }; $('#r-error').appendChild(a); }
+        return;
+      }
       if (err.message === 'duplicate_photo') {
         const ex = err.body?.existing || [];
         msg = 'รูปนี้เคยถูกแจ้งไว้แล้ว' + (ex.length ? ` (${ex.map((e) => e.plate_display + ' ' + e.province).join(', ')})` : '') + ' ถ้าเป็นป้ายคนละแผ่น กรุณาถ่ายรูปใหม่';
@@ -484,7 +499,7 @@
     } finally {
       btn.disabled = false; btn.textContent = 'ส่งรายงาน';
     }
-  });
+  }
 
   function showSuccess(created) {
     const list = $('#ok-list'); list.innerHTML = '';
