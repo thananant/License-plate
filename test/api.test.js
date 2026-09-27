@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { normalizePlate, isPlausiblePlate } from '../src/plate.js';
-import { parseGeminiResponse, normalisePlates } from '../src/ocr.js';
+import { parseGeminiResponse, normalisePlates, chooseGeminiModel } from '../src/ocr.js';
 
 const PORT = 3999;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -345,4 +345,18 @@ test('gemini response parsing and plate normalisation', () => {
   assert.equal(plates[1].plausible, false);
   assert.throws(() => parseGeminiResponse({ promptFeedback: { blockReason: 'SAFETY' } }), /ai_declined/);
   assert.throws(() => parseGeminiResponse({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'not json' }] } }] }), /ocr_failed/);
+});
+
+test('gemini model auto-selection', () => {
+  const list = [
+    { name: 'models/gemini-embedding-001', supportedGenerationMethods: ['embedContent'] },
+    { name: 'models/gemini-3.0-pro', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3.0-flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3.0-flash-lite', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.0-flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3.0-flash-preview-0901', supportedGenerationMethods: ['generateContent'] },
+  ];
+  assert.equal(chooseGeminiModel(list, 'gemini-2.5-flash'), 'gemini-3.0-flash'); // preferred missing -> newest flash
+  assert.equal(chooseGeminiModel(list, 'gemini-2.0-flash'), 'gemini-2.0-flash'); // preferred present
+  assert.equal(chooseGeminiModel([{ name: 'models/x', supportedGenerationMethods: ['embedContent'] }], 'y'), null);
 });

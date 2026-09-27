@@ -13,9 +13,12 @@ import { cleanPlateDisplay, normalizePlate, isPlausiblePlate } from './plate.js'
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 export const OCR_PROVIDER = ANTHROPIC_KEY ? 'anthropic' : GEMINI_KEY ? 'gemini' : null;
+// For Gemini the model name is resolved against the live model list on first
+// use (Google renames/retires models often); GEMINI_MODEL is a preference.
 export const OCR_MODEL = OCR_PROVIDER === 'anthropic'
   ? (process.env.OCR_MODEL || 'claude-opus-5').trim()
   : (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+let geminiModel = null; // resolved name, e.g. 'gemini-2.5-flash'
 export const ocrEnabled = OCR_PROVIDER != null;
 
 const client = OCR_PROVIDER === 'anthropic' ? new Anthropic({ apiKey: ANTHROPIC_KEY, maxRetries: 1, timeout: 60_000 }) : null;
@@ -126,8 +129,55 @@ export function parseGeminiResponse(json) {
   return parsed?.plates ?? [];
 }
 
-async function readWithGemini(b64) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(OCR_MODEL)}:generateContent`;
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+/**
+ * Pick a usable Gemini model from the API's model list. Preference: the
+ * configured name, then newer "flash" models, then anything that can
+ * generateContent. Exported for tests.
+ */
+export function chooseGeminiModel(models, preferred) {
+  const usable = (models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => String(m.name || '').replace(/^models\//, ''))
+    .filter((n) => n && !/embedding|imagen|veo|tts|audio|image-generation|live|thinking-exp|-exp-/i.test(n));
+  if (!usable.length) return null;
+  if (preferred && usable.includes(preferred)) return preferred;
+  const score = (n) => {
+    const ver = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || '0');
+    let s = ver * 100;
+    if (/flash/.test(n)) s += 30; else if (/pro/.test(n)) s += 10;
+    if (/lite/.test(n)) s -= 5;
+    if (/preview|exp/.test(n)) s -= 8;
+    if (/latest/.test(n)) s += 1;
+    if (/-\d{3,}$/.test(n)) s -= 2; // dated snapshots after their alias
+    return s;
+  };
+  return usable.sort((a, b) => score(b) - score(a))[0];
+}
+
+async function resolveGeminiModel(force = false) {
+  if (geminiModel && !force) return geminiModel;
+  let res;
+  try {
+    res = await fetch(`${GEMINI_BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': GEMINI_KEY } });
+  } catch (e) {
+    throw err('ocr_failed', { detail: 'models list: ' + e?.message });
+  }
+  if (res.status === 400 || res.status === 401 || res.status === 403) throw err('ocr_config', { detail: 'models list http_' + res.status + ' ' + (await res.text().catch(() => '')).slice(0, 200) });
+  if (!res.ok) throw err('ocr_failed', { detail: 'models list http_' + res.status });
+  const json = await res.json();
+  const chosen = chooseGeminiModel(json.models, OCR_MODEL);
+  if (!chosen) throw err('ocr_config', { detail: 'no Gemini model supports generateContent for this key' });
+  if (chosen !== OCR_MODEL) console.warn(`gemini: "${OCR_MODEL}" not available, using "${chosen}" (available: ${(json.models || []).map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /gemini/.test(n)).slice(0, 15).join(', ')})`);
+  else console.log(`gemini: using ${chosen}`);
+  geminiModel = chosen;
+  return chosen;
+}
+
+async function readWithGemini(b64, retry = true) {
+  const model = await resolveGeminiModel();
+  const url = `${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`;
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM }] },
     contents: [{ role: 'user', parts: [
@@ -147,8 +197,14 @@ async function readWithGemini(b64) {
     clearTimeout(t);
   }
   if (res.status === 429) throw err('ocr_quota');
-  if (res.status === 400 || res.status === 401 || res.status === 403) throw err('ocr_config', { detail: await res.text().catch(() => '') });
-  if (!res.ok) throw err('ocr_failed', { detail: `http_${res.status}` });
+  if (res.status === 404 && retry) {
+    // model renamed/retired since we resolved it: refresh the list once
+    console.warn(`gemini: ${model} returned 404, re-resolving model list`);
+    await resolveGeminiModel(true);
+    return readWithGemini(b64, false);
+  }
+  if (res.status === 400 || res.status === 401 || res.status === 403) throw err('ocr_config', { detail: (await res.text().catch(() => '')).slice(0, 300) });
+  if (!res.ok) throw err('ocr_failed', { detail: `http_${res.status} ${(await res.text().catch(() => '')).slice(0, 200)}` });
   return parseGeminiResponse(await res.json());
 }
 
@@ -160,5 +216,5 @@ export async function readPlates(buffer) {
   if (!ocrEnabled) throw err('ocr_disabled');
   const b64 = await prepare(buffer);
   const raw = OCR_PROVIDER === 'anthropic' ? await readWithAnthropic(b64) : await readWithGemini(b64);
-  return { plates: normalisePlates(raw), model: OCR_MODEL, provider: OCR_PROVIDER };
+  return { plates: normalisePlates(raw), model: OCR_PROVIDER === 'gemini' ? geminiModel : OCR_MODEL, provider: OCR_PROVIDER };
 }
