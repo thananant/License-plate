@@ -86,10 +86,10 @@
             </label>
             <div id="r-preview" class="preview" hidden></div>
             <div id="ai-box" hidden>
-              <button type="button" class="btn ai block" id="r-ai">✨ อ่านเลขทะเบียนจากรูปด้วย AI</button>
+              <button type="button" class="btn ai block" id="r-ai">✨ อ่านเลขทะเบียนจากรูปอัตโนมัติ</button>
               <p id="ai-status" class="muted small" style="margin:8px 0 0"></p>
             </div>
-            <p class="muted small" style="margin:8px 0 0">ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ</p>
+            <p class="muted small" style="margin:8px 0 0" id="s1-note">ถ่ายให้เห็นทุกแผ่นชัด ๆ ตรง ๆ ในรูปเดียวได้ ระบบจะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ</p>
           </div>
 
           <div class="step">
@@ -245,6 +245,7 @@
     </div>
   </dialog>
 
+  <script src="/js/ocr-local.js"></script>
   <script src="/js/map.js"></script>
   <script src="/js/app.js"></script>
 </body>

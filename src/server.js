@@ -57,6 +57,7 @@ app.use(
         'default-src': ["'self'"],
         'script-src': [
           "'self'",
+          "'wasm-unsafe-eval'", // Tesseract.js (on-device OCR) runs WebAssembly
           'https://maps.googleapis.com',
           'https://maps.gstatic.com',
         ],
@@ -346,7 +347,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 // Cache busting: index.html is never cached; CSS/JS URLs carry a content hash
 // so every deploy is picked up on the next refresh.
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js'];
+const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js', 'js/ocr-local.js'];
 const assetHash = crypto.createHash('sha256');
 for (const f of ASSET_FILES) assetHash.update(await fs.readFile(path.join(PUBLIC_DIR, f)));
 const ASSET_VERSION = assetHash.digest('hex').slice(0, 10);

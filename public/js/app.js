@@ -296,11 +296,12 @@
     const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.alt = 'ตัวอย่างรูป';
     img.onload = () => URL.revokeObjectURL(img.src);
     box.appendChild(img); box.hidden = false;
-    if (cfg.ocrEnabled) $('#ai-box').hidden = false;
+    $('#ai-box').hidden = false;
   });
 
   const AI_ERR = {
-    ocr_disabled: 'ระบบ AI ยังไม่เปิดใช้งาน กรุณากรอกเอง',
+    ocr_disabled: 'ระบบอ่านอัตโนมัติยังไม่เปิดใช้งาน กรุณากรอกเอง',
+    ocr_load_failed: 'โหลดตัวอ่านป้ายไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่ หรือกรอกเอง',
     ocr_budget: 'วันนี้ใช้ AI ครบโควตาแล้ว กรุณากรอกเอง',
     http_429: 'ใช้ AI บ่อยเกินไป รอสักครู่หรือกรอกเอง',
     ai_declined: 'AI ไม่สามารถอ่านรูปนี้ได้ กรุณากรอกเอง',
@@ -310,13 +311,23 @@
     const f = $('#r-photo').files[0];
     if (!f) return;
     const btn = $('#r-ai'); const st = $('#ai-status');
-    btn.disabled = true; st.className = 'small spin'; st.textContent = 'AI กำลังอ่านป้าย… ประมาณ 5-15 วินาที';
+    btn.disabled = true; st.className = 'small spin'; st.style.color = '';
+    st.textContent = cfg.ocrEnabled ? 'AI กำลังอ่านป้าย… ประมาณ 5-15 วินาที' : 'กำลังเตรียมตัวอ่านป้าย…';
     try {
-      const fd = new FormData(); fd.set('photo', f);
-      const out = await api('/api/ocr', { method: 'POST', body: fd });
+      let out;
+      if (cfg.ocrEnabled) {
+        const fd = new FormData(); fd.set('photo', f);
+        out = await api('/api/ocr', { method: 'POST', body: fd });
+      } else {
+        // Free path: Tesseract runs in this browser, the photo never leaves the device.
+        out = await window.LocalOCR.readPlates(f, cfg.provinces, (m) => {
+          if (m.status === 'loading tesseract core' || m.status === 'initializing tesseract') st.textContent = 'กำลังโหลดตัวอ่านป้าย (ครั้งแรกประมาณ 4 MB)…';
+          else if (m.status === 'loading language traineddata') st.textContent = `กำลังโหลดโมเดลภาษาไทย… ${Math.round((m.progress || 0) * 100)}%`;
+          else if (m.status === 'recognizing text') st.textContent = `กำลังอ่านป้าย… ${Math.round((m.progress || 0) * 100)}%`;
+        });
+      }
       st.className = 'muted small';
-      if (!out.plates.length) { st.textContent = 'AI ไม่พบป้ายทะเบียนในรูป ลองถ่ายใหม่ให้ชัดขึ้น หรือกรอกเอง'; return; }
-      // Replace empty rows with AI results; keep rows the user already typed in.
+      if (!out.plates.length) { st.textContent = 'ไม่พบป้ายทะเบียนในรูป ลองถ่ายใหม่ให้ชัด ตรง และใกล้ขึ้น หรือกรอกเอง'; return; }
       $$('.plate-row').forEach((r) => { if (!r.querySelector('.p-plate').value.trim()) r.remove(); });
       out.plates.forEach((p) => addPlateRow(p));
       renumberRows();
@@ -325,8 +336,7 @@
       $('#plate-rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       st.className = 'small'; st.style.color = 'var(--danger)';
-      st.textContent = AI_ERR[err.message] || 'AI อ่านไม่สำเร็จ กรุณากรอกเอง';
-      setTimeout(() => (st.style.color = ''), 4000);
+      st.textContent = AI_ERR[err.message] || 'อ่านไม่สำเร็จ กรุณากรอกเอง';
     } finally {
       btn.disabled = false;
     }
@@ -496,7 +506,7 @@
     }
     fillProvinces();
     addPlateRow();
-    if (!cfg.ocrEnabled) $('#s1-hint').textContent = '(ไม่บังคับ)';
+    if (cfg.ocrEnabled) $('#s1-note').textContent = 'ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ';
     try {
       map = await window.PlateMap.createMap($('#map'), cfg);
       map.onClick((p) => { if (activeTab === 'report') setDraft(p); });
