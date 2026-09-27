@@ -79,29 +79,30 @@
       <section class="tabpane" data-pane="report">
         <form id="report-form" autocomplete="off" enctype="multipart/form-data">
           <div class="step">
-            <div class="step-head"><span class="step-num">1</span><strong>ข้อมูลป้าย</strong></div>
-            <label>
-              <span>เลขทะเบียน <em>*</em></span>
-              <input name="plate" id="r-plate" required maxlength="20" placeholder="เช่น 1กข 1234">
+            <div class="step-head"><span class="step-num">1</span><strong>ถ่ายรูปป้าย</strong> <span class="muted small" id="s1-hint">(แนะนำ)</span></div>
+            <label style="margin-bottom:8px">
+              <span class="sr-only">รูปถ่ายป้าย</span>
+              <input type="file" name="photo" id="r-photo" accept="image/*" capture="environment">
             </label>
-            <label>
-              <span>จังหวัดบนป้าย <em>*</em></span>
-              <select name="province" id="r-province" required>
-                <option value="">— เลือกจังหวัด —</option>
-              </select>
-            </label>
-            <fieldset class="radios">
-              <legend>ประเภทรถ <em>*</em></legend>
-              <div class="seg">
-                <label><input type="radio" name="vehicleType" value="car" checked><span>🚗 รถยนต์</span></label>
-                <label><input type="radio" name="vehicleType" value="motorcycle"><span>🏍️ มอเตอร์ไซค์</span></label>
-                <label><input type="radio" name="vehicleType" value="other"><span>อื่น ๆ</span></label>
-              </div>
-            </fieldset>
+            <div id="r-preview" class="preview" hidden></div>
+            <div id="ai-box" hidden>
+              <button type="button" class="btn ai block" id="r-ai">✨ อ่านเลขทะเบียนจากรูปด้วย AI</button>
+              <p id="ai-status" class="muted small" style="margin:8px 0 0"></p>
+            </div>
+            <p class="muted small" style="margin:8px 0 0">ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ</p>
           </div>
 
           <div class="step">
-            <div class="step-head"><span class="step-num">2</span><strong>จุดที่พบ <em>*</em></strong></div>
+            <div class="step-head">
+              <span class="step-num">2</span><strong>ตรวจสอบข้อมูลป้าย <em>*</em></strong>
+              <span class="muted small" id="plate-count"></span>
+            </div>
+            <div id="plate-rows"></div>
+            <button type="button" class="btn small" id="add-plate">＋ เพิ่มป้ายอีกแผ่น</button>
+          </div>
+
+          <div class="step">
+            <div class="step-head"><span class="step-num">3</span><strong>จุดที่พบ <em>*</em></strong></div>
             <div class="locbox">
               <div class="locbox-head">
                 <span class="muted">คลิกบนแผนที่ ลากหมุด หรือใช้ GPS</span>
@@ -125,15 +126,9 @@
           </div>
 
           <div class="step">
-            <div class="step-head"><span class="step-num">3</span><strong>รูปและรายละเอียด</strong> <span class="muted small">(ไม่บังคับ)</span></div>
+            <div class="step-head"><span class="step-num">4</span><strong>รายละเอียดเพิ่มเติม</strong> <span class="muted small">(ไม่บังคับ)</span></div>
             <label>
-              <span>รูปถ่ายป้าย (สูงสุด 8 MB)</span>
-              <input type="file" name="photo" id="r-photo" accept="image/*">
-            </label>
-            <div id="r-preview" class="preview" hidden></div>
-            <p class="muted small">ระบบลบข้อมูล EXIF/GPS ในรูปและย่อขนาดให้อัตโนมัติ</p>
-            <label>
-              <span>ข้อความเพิ่มเติม</span>
+              <span>ข้อความถึงเจ้าของ</span>
               <textarea name="note" id="r-note" maxlength="500" rows="3" placeholder="เช่น ป้ายอยู่ที่ป้อมยาม ติดต่อรับได้ 8:00–17:00"></textarea>
             </label>
             <p class="warn small" style="margin:0">⚠️ อย่าใส่เบอร์โทร ชื่อ หรือข้อมูลส่วนตัวของคุณ ระบุแค่ "รับได้ที่ไหน" ก็เพียงพอ</p>
@@ -147,15 +142,36 @@
           <p id="r-error" class="error" role="alert" hidden style="margin-top:10px"></p>
         </form>
 
+        <template id="plate-row-tpl">
+          <div class="plate-row">
+            <div class="plate-row-head">
+              <span class="plate-row-idx"></span>
+              <span class="conf"></span>
+              <button type="button" class="btn small ghost remove-plate" title="ลบแผ่นนี้">✕</button>
+            </div>
+            <div class="row">
+              <label><span>เลขทะเบียน <em>*</em></span><input class="p-plate" required maxlength="20" placeholder="เช่น 1กข 1234"></label>
+              <label><span>จังหวัด <em>*</em></span><select class="p-province" required><option value="">— เลือก —</option></select></label>
+            </div>
+            <div class="seg seg-small">
+              <label><input type="radio" value="car" checked><span>🚗 รถยนต์</span></label>
+              <label><input type="radio" value="motorcycle"><span>🏍️ มอเตอร์ไซค์</span></label>
+              <label><input type="radio" value="other"><span>อื่น ๆ</span></label>
+            </div>
+            <p class="ai-note muted small" hidden></p>
+          </div>
+        </template>
+
         <div id="r-success" class="success" hidden>
           <h3>✅ บันทึกแล้ว ขอบคุณที่ช่วยกัน</h3>
-          <p>เก็บรหัสด้านล่างไว้ ใช้สำหรับ "ทำเครื่องหมายว่าคืนเจ้าของแล้ว" หรือ "ลบรายงาน" ในภายหลัง <strong>ระบบไม่เก็บสำเนา ถ้าหายจะแก้ไขไม่ได้</strong></p>
-          <div class="tokenbox">
-            <div><span>รหัสรายงาน</span><code id="ok-id"></code></div>
-            <div><span>รหัสจัดการ</span><code id="ok-token"></code></div>
-          </div>
+          <p>ป้ายขึ้นบนแผนที่แล้ว เมื่อเจ้าของมารับ ใครก็กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย ไม่ต้องใช้รหัสใด ๆ</p>
+          <details class="tokendetails">
+            <summary>รหัสสำหรับแก้ไข/ลบด้วยตัวเอง (ไม่บังคับ)</summary>
+            <p class="muted small" style="margin:8px 0">ถ้าอยากลบหรือแก้รายงานนี้เองภายหลัง ให้เก็บรหัสนี้ไว้ ระบบไม่เก็บสำเนา</p>
+            <div class="tokenbox" id="ok-list"></div>
+            <button type="button" class="btn small" id="ok-copy">📋 คัดลอกรหัส</button>
+          </details>
           <div class="actions">
-            <button type="button" class="btn" id="ok-copy">📋 คัดลอกทั้งคู่</button>
             <button type="button" class="btn primary" id="ok-another">แจ้งป้ายอีกแผ่น</button>
           </div>
         </div>
@@ -164,7 +180,7 @@
       <!-- ===== MANAGE ===== -->
       <section class="tabpane" data-pane="manage">
         <form id="manage-form" autocomplete="off">
-          <p class="hint">ใช้รหัสที่ได้รับตอนส่งรายงาน เพื่ออัปเดตสถานะหรือลบรายงานของคุณ</p>
+          <p class="hint">สำหรับผู้ดูแลระบบ หรือผู้แจ้งที่เก็บรหัสไว้ • คนทั่วไปไม่ต้องใช้หน้านี้: ถ้าเจ้าของมารับป้ายแล้ว กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย</p>
           <label><span>รหัสรายงาน</span><input id="m-id" required placeholder="เช่น A1b2C3d4E5f6"></label>
           <label><span>รหัสจัดการ</span><input id="m-token" required placeholder="รหัส 32 ตัวอักษร"></label>
           <div class="actions">
@@ -209,7 +225,23 @@
         <a id="d-gmaps" class="btn primary" target="_blank" rel="noopener noreferrer">🧭 นำทางด้วย Google Maps</a>
         <a id="d-osm" class="btn" target="_blank" rel="noopener noreferrer">เปิดใน OpenStreetMap</a>
       </div>
-      <p class="muted small">รหัสรายงาน: <code id="d-id"></code></p>
+
+      <div id="d-claim" class="claimbox">
+        <button type="button" class="btn ok block" id="d-claim-open">✅ ป้ายนี้คืนเจ้าของแล้ว</button>
+        <form id="claim-form" hidden>
+          <p class="small" style="margin:8px 0">เจ้าของมารับแล้วใช่ไหม? กดยืนยันเพื่อย้ายรายการไปสถานะ "คืนแล้ว" คนอื่นจะได้ไม่ต้องตามหาซ้ำ</p>
+          <label><span>รูปยืนยัน (ไม่บังคับ)</span><input type="file" name="photo" id="c-photo" accept="image/*" capture="environment"></label>
+          <label><span>หมายเหตุ (ไม่บังคับ)</span><input name="note" id="c-note" maxlength="200" placeholder="เช่น เจ้าของมารับเมื่อบ่ายนี้"></label>
+          <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <div class="actions" style="margin:0">
+            <button type="submit" class="btn ok" id="c-submit">ยืนยันคืนแล้ว</button>
+            <button type="button" class="btn" id="c-cancel">ยกเลิก</button>
+          </div>
+          <p id="c-msg" class="msg"></p>
+        </form>
+        <div id="d-returned" class="returned-info" hidden></div>
+      </div>
+      <p class="muted small" style="margin-top:10px">รหัสรายงาน: <code id="d-id"></code></p>
     </div>
   </dialog>
 

@@ -32,6 +32,12 @@ export function openDatabase(dataDir) {
     CREATE INDEX IF NOT EXISTS idx_reports_geo ON reports(lat, lng);
   `);
 
+  // Lightweight migrations for databases created before these columns existed.
+  const cols = new Set(db.prepare('PRAGMA table_info(reports)').all().map((c) => c.name));
+  for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER']]) {
+    if (!cols.has(name)) db.exec(`ALTER TABLE reports ADD COLUMN ${name} ${type}`);
+  }
+
   const stmts = {
     insert: db.prepare(`
       INSERT INTO reports (id, plate_display, plate_norm, province, vehicle_type, lat, lng,
@@ -41,12 +47,15 @@ export function openDatabase(dataDir) {
     `),
     byId: db.prepare(`SELECT * FROM reports WHERE id = ?`),
     setStatus: db.prepare(`UPDATE reports SET status = ?, updated_at = ? WHERE id = ?`),
+    claim: db.prepare(`UPDATE reports SET status = 'returned', claim_note = @claim_note, claim_photo = @claim_photo,
+      claimed_at = @now, updated_at = @now WHERE id = @id`),
+    expired: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'returned' AND updated_at < ?`),
     delete: db.prepare(`DELETE FROM reports WHERE id = ?`),
     count: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE status = 'found'`),
   };
 
   const PUBLIC_COLS = `id, plate_display, province, vehicle_type, lat, lng, accuracy_m,
-    place_note, note, photo, status, created_at, updated_at`;
+    place_note, note, photo, status, claim_note, claim_photo, claimed_at, created_at, updated_at`;
 
   function search({ plate, province, vehicleType, status, bbox, limit = 200 }) {
     const where = [];
@@ -84,6 +93,14 @@ export function openDatabase(dataDir) {
     insert: (row) => stmts.insert.run(row),
     byId: (id) => stmts.byId.get(id),
     setStatus: (id, status) => stmts.setStatus.run(status, Date.now(), id),
+    claim: (id, { note, photo }) => stmts.claim.run({ id, claim_note: note, claim_photo: photo, now: Date.now() }),
+    /** Returned reports older than `olderThanMs` are deleted; returns rows so the caller can unlink photos. */
+    purgeReturned: (olderThanMs) => {
+      const rows = stmts.expired.all(Date.now() - olderThanMs);
+      const del = db.transaction((ids) => ids.forEach((id) => stmts.delete.run(id)));
+      del(rows.map((r) => r.id));
+      return rows;
+    },
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
     search,

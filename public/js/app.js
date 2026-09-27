@@ -150,8 +150,46 @@
     $('#d-gmaps').href = `https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`;
     $('#d-osm').href = `https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lng}#map=19/${r.lat}/${r.lng}`;
     $('#d-id').textContent = r.id;
+    renderClaim(r);
     $('#detail').showModal();
   }
+
+  let detailReport = null;
+  function renderClaim(r) {
+    detailReport = r;
+    const form = $('#claim-form'); form.reset(); form.hidden = true; $('#c-msg').textContent = ''; $('#c-msg').className = 'msg';
+    const info = $('#d-returned');
+    if (r.status === 'returned') {
+      $('#d-claim-open').hidden = true;
+      info.hidden = false; info.innerHTML = '';
+      info.append('✅ คืนเจ้าของแล้ว' + (r.claimed_at ? ' เมื่อ ' + new Date(r.claimed_at).toLocaleString('th-TH') : ''));
+      if (r.claim_note) { const m = document.createElement('span'); m.className = 'muted'; m.textContent = r.claim_note; info.appendChild(m); }
+      if (r.claim_photo) { const img = document.createElement('img'); img.src = '/uploads/' + encodeURIComponent(r.claim_photo); img.alt = 'รูปยืนยันการคืน'; info.appendChild(img); }
+    } else {
+      $('#d-claim-open').hidden = false;
+      info.hidden = true;
+    }
+  }
+  $('#d-claim-open').addEventListener('click', () => { $('#claim-form').hidden = false; $('#d-claim-open').hidden = true; });
+  $('#c-cancel').addEventListener('click', () => { $('#claim-form').hidden = true; $('#d-claim-open').hidden = false; });
+  $('#claim-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!detailReport) return;
+    const btn = $('#c-submit'); const msg = $('#c-msg');
+    btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; msg.className = 'msg'; msg.textContent = '';
+    try {
+      const fd = new FormData($('#claim-form'));
+      const updated = await api('/api/reports/' + encodeURIComponent(detailReport.id) + '/claim', { method: 'POST', body: fd });
+      renderClaim(updated);
+      $('#d-meta').textContent = $('#d-meta').textContent.replace('ยังไม่มีคนมารับ', 'คืนเจ้าของแล้ว');
+      runSearch();
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = err.status === 429 ? 'ทำรายการบ่อยเกินไป กรุณารอสักครู่' : ERR[err.message] || 'บันทึกไม่สำเร็จ กรุณาลองใหม่';
+    } finally {
+      btn.disabled = false; btn.textContent = 'ยืนยันคืนแล้ว';
+    }
+  });
   async function copy(text, btn) {
     try { await navigator.clipboard.writeText(text); if (btn) { const t = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => (btn.textContent = t), 1500); } }
     catch { window.prompt('คัดลอกข้อความนี้', text); }
@@ -248,16 +286,98 @@
     }
   }
 
-  // ---------- report: photo preview ----------
+  // ---------- report: photo preview + AI ----------
   $('#r-photo').addEventListener('change', () => {
     const f = $('#r-photo').files[0];
     const box = $('#r-preview'); box.innerHTML = ''; box.hidden = true;
+    $('#ai-box').hidden = true; $('#ai-status').textContent = '';
     if (!f) return;
     if (f.size > cfg.limits.maxPhotoBytes) { showError('รูปใหญ่เกิน 8 MB'); $('#r-photo').value = ''; return; }
     const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.alt = 'ตัวอย่างรูป';
     img.onload = () => URL.revokeObjectURL(img.src);
     box.appendChild(img); box.hidden = false;
+    if (cfg.ocrEnabled) $('#ai-box').hidden = false;
   });
+
+  const AI_ERR = {
+    ocr_disabled: 'ระบบ AI ยังไม่เปิดใช้งาน กรุณากรอกเอง',
+    ocr_budget: 'วันนี้ใช้ AI ครบโควตาแล้ว กรุณากรอกเอง',
+    http_429: 'ใช้ AI บ่อยเกินไป รอสักครู่หรือกรอกเอง',
+    ai_declined: 'AI ไม่สามารถอ่านรูปนี้ได้ กรุณากรอกเอง',
+    bad_image: 'อ่านไฟล์รูปไม่ได้ ลองถ่ายใหม่',
+  };
+  $('#r-ai').addEventListener('click', async () => {
+    const f = $('#r-photo').files[0];
+    if (!f) return;
+    const btn = $('#r-ai'); const st = $('#ai-status');
+    btn.disabled = true; st.className = 'small spin'; st.textContent = 'AI กำลังอ่านป้าย… ประมาณ 5-15 วินาที';
+    try {
+      const fd = new FormData(); fd.set('photo', f);
+      const out = await api('/api/ocr', { method: 'POST', body: fd });
+      st.className = 'muted small';
+      if (!out.plates.length) { st.textContent = 'AI ไม่พบป้ายทะเบียนในรูป ลองถ่ายใหม่ให้ชัดขึ้น หรือกรอกเอง'; return; }
+      // Replace empty rows with AI results; keep rows the user already typed in.
+      $$('.plate-row').forEach((r) => { if (!r.querySelector('.p-plate').value.trim()) r.remove(); });
+      out.plates.forEach((p) => addPlateRow(p));
+      renumberRows();
+      const low = out.plates.filter((p) => p.confidence < 0.7 || !p.plausible || !p.province).length;
+      st.textContent = `พบ ${out.plates.length} แผ่น` + (low ? ` · ${low} แผ่นควรตรวจสอบเป็นพิเศษ (กรอบสีเหลือง)` : ' · โปรดตรวจสอบก่อนส่ง');
+      $('#plate-rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      st.className = 'small'; st.style.color = 'var(--danger)';
+      st.textContent = AI_ERR[err.message] || 'AI อ่านไม่สำเร็จ กรุณากรอกเอง';
+      setTimeout(() => (st.style.color = ''), 4000);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---------- report: plate rows ----------
+  function addPlateRow(data = {}) {
+    const node = $('#plate-row-tpl').content.firstElementChild.cloneNode(true);
+    const sel = node.querySelector('.p-province');
+    cfg.provinces.forEach((p) => { const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o); });
+    node.querySelector('.p-plate').value = data.plate || '';
+    sel.value = data.province || '';
+    const type = ['car', 'motorcycle', 'other'].includes(data.vehicleType) ? data.vehicleType : 'car';
+    node.querySelectorAll('.seg input').forEach((r) => { r.checked = r.value === type; });
+    const conf = node.querySelector('.conf');
+    if (typeof data.confidence === 'number') {
+      const pct = Math.round(data.confidence * 100);
+      const low = data.confidence < 0.7 || data.plausible === false || !data.province;
+      conf.textContent = low ? `ตรวจสอบ · AI มั่นใจ ${pct}%` : `AI มั่นใจ ${pct}%`;
+      conf.className = 'conf ' + (low ? 'lo' : 'hi');
+      if (low) node.classList.add('low');
+    } else {
+      conf.remove();
+    }
+    const note = node.querySelector('.ai-note');
+    if (data.note) { note.textContent = '💡 ' + data.note; note.hidden = false; }
+    node.querySelector('.remove-plate').addEventListener('click', () => {
+      if ($$('.plate-row').length === 1) { node.querySelector('.p-plate').value = ''; sel.value = ''; node.classList.remove('low'); note.hidden = true; conf.remove(); return; }
+      node.remove(); renumberRows();
+    });
+    node.querySelector('.p-plate').addEventListener('input', () => node.classList.remove('low'));
+    $('#plate-rows').appendChild(node);
+    renumberRows();
+    return node;
+  }
+  function renumberRows() {
+    const rows = $$('.plate-row');
+    rows.forEach((r, i) => { r.querySelector('.plate-row-idx').textContent = `แผ่นที่ ${i + 1}`; });
+    $('#plate-count').textContent = rows.length > 1 ? `${rows.length} แผ่น` : '';
+    // Radio groups must have unique names per row.
+    rows.forEach((r, i) => r.querySelectorAll('.seg input').forEach((inp) => (inp.name = 'vt' + i)));
+  }
+  function readPlateRows() {
+    return $$('.plate-row').map((r) => ({
+      plate: r.querySelector('.p-plate').value.trim(),
+      province: r.querySelector('.p-province').value,
+      vehicleType: r.querySelector('.seg input:checked')?.value || 'car',
+      el: r,
+    }));
+  }
+  $('#add-plate').addEventListener('click', () => { const n = addPlateRow(); n.querySelector('.p-plate').focus(); });
 
   // ---------- report: submit ----------
   function showError(msg) { const e = $('#r-error'); e.textContent = msg; e.hidden = !msg; }
@@ -271,19 +391,34 @@
   $('#report-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('');
-    if (!draft) { showError('กรุณาปักหมุดจุดที่พบบนแผนที่ก่อน'); setTab('report'); return; }
-    const fd = new FormData($('#report-form'));
-    fd.set('lat', fmt7(draft.lat)); fd.set('lng', fmt7(draft.lng));
-    const btn = $('#r-submit'); btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+    if (!draft) { showError('กรุณาปักหมุดจุดที่พบบนแผนที่ก่อน (ขั้นที่ 3)'); $('#r-locstatus').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    const rows = readPlateRows();
+    const bad = rows.find((r) => !r.plate || !r.province);
+    if (bad) { showError('กรุณากรอกเลขทะเบียนและจังหวัดให้ครบทุกแผ่น'); bad.el.querySelector(!bad.plate ? '.p-plate' : '.p-province').focus(); return; }
+    if (rows.some((r) => r.plate.includes('?'))) { showError('มีเลขทะเบียนที่ยังมีเครื่องหมาย ? กรุณาแก้เป็นตัวอักษรที่ถูกต้อง'); return; }
+
+    const form = $('#report-form');
+    const btn = $('#r-submit'); btn.disabled = true;
+    const photo = $('#r-photo').files[0] || null;
+    const created = [];
     try {
-      const out = await api('/api/reports', { method: 'POST', body: fd });
-      $('#ok-id').textContent = out.report.id;
-      $('#ok-token').textContent = out.token;
-      $('#ok-copy').onclick = () => copy(`รหัสรายงาน: ${out.report.id}\nรหัสจัดการ: ${out.token}`, $('#ok-copy'));
-      $('#report-form').hidden = true; $('#r-success').hidden = false;
+      for (let i = 0; i < rows.length; i++) {
+        btn.textContent = rows.length > 1 ? `กำลังส่ง ${i + 1}/${rows.length}…` : 'กำลังส่ง…';
+        const fd = new FormData();
+        fd.set('plate', rows[i].plate); fd.set('province', rows[i].province); fd.set('vehicleType', rows[i].vehicleType);
+        fd.set('lat', fmt7(draft.lat)); fd.set('lng', fmt7(draft.lng));
+        fd.set('accuracy', $('#r-accuracy').value); fd.set('placeNote', $('#r-place').value); fd.set('note', $('#r-note').value);
+        fd.set('website', form.elements.website.value);
+        if (photo) fd.set('photo', photo);
+        const out = await api('/api/reports', { method: 'POST', body: fd });
+        created.push(out);
+        rows[i].el.remove();
+      }
+      showSuccess(created);
       draft = null; draftAccuracy = null; map?.setDraft(null); map?.setAccuracyCircle(null);
       runSearch();
     } catch (err) {
+      renumberRows();
       let msg = ERR[err.message] || 'ส่งไม่สำเร็จ กรุณาลองใหม่';
       if (err.body?.fields) {
         const f = err.body.fields;
@@ -291,13 +426,31 @@
         else if (f.province) msg = 'กรุณาเลือกจังหวัด';
         else if (f.location) msg = 'พิกัดไม่ถูกต้อง กรุณาปักหมุดใหม่';
       }
+      if (created.length) { showSuccess(created); msg = `ส่งสำเร็จ ${created.length} แผ่น แต่แผ่นที่เหลือไม่สำเร็จ: ${msg}`; }
       showError(msg);
     } finally {
       btn.disabled = false; btn.textContent = 'ส่งรายงาน';
     }
   });
+
+  function showSuccess(created) {
+    const list = $('#ok-list'); list.innerHTML = '';
+    created.forEach((c) => {
+      const d = document.createElement('div'); d.className = 'rep';
+      const b = document.createElement('b'); b.textContent = `${c.report.plate_display} · ${c.report.province}`;
+      const id = document.createElement('div'); id.innerHTML = '<span>รหัสรายงาน</span> '; const c1 = document.createElement('code'); c1.textContent = c.report.id; id.appendChild(c1);
+      const tk = document.createElement('div'); tk.innerHTML = '<span>รหัสจัดการ</span> '; const c2 = document.createElement('code'); c2.textContent = c.token; tk.appendChild(c2);
+      d.append(b, id, tk); list.appendChild(d);
+    });
+    const text = created.map((c) => `${c.report.plate_display} ${c.report.province}\nรหัสรายงาน: ${c.report.id}\nรหัสจัดการ: ${c.token}`).join('\n\n');
+    $('#ok-copy').onclick = () => copy(text, $('#ok-copy'));
+    $('#report-form').hidden = true; $('#r-success').hidden = false;
+    $('#r-success').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   $('#ok-another').addEventListener('click', () => {
     $('#report-form').reset(); $('#r-preview').hidden = true; $('#r-preview').innerHTML = '';
+    $('#ai-box').hidden = true; $('#ai-status').textContent = '';
+    $('#plate-rows').innerHTML = ''; addPlateRow();
     $('#r-locstatus').textContent = 'ยังไม่ได้ปักหมุด'; $('#r-locstatus').className = 'muted';
     $('#report-form').hidden = false; $('#r-success').hidden = true;
   });
@@ -328,7 +481,7 @@
 
   // ---------- init ----------
   function fillProvinces() {
-    for (const sel of ['#s-province', '#r-province']) {
+    for (const sel of ['#s-province']) {
       const s = $(sel);
       cfg.provinces.forEach((p) => { const o = document.createElement('option'); o.value = p; o.textContent = p; s.appendChild(o); });
     }
@@ -342,6 +495,8 @@
       return;
     }
     fillProvinces();
+    addPlateRow();
+    if (!cfg.ocrEnabled) $('#s1-hint').textContent = '(ไม่บังคับ)';
     try {
       map = await window.PlateMap.createMap($('#map'), cfg);
       map.onClick((p) => { if (activeTab === 'report') setDraft(p); });

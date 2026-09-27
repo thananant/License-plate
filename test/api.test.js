@@ -15,7 +15,7 @@ let tmp;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plates-'));
   proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('listening')) resolve(); }));
@@ -154,4 +154,41 @@ test('admin token can moderate any report', async () => {
   assert.equal(r.status, 403);
   r = await fetch(BASE + '/api/reports/' + report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123' }) });
   assert.equal(r.status, 204);
+});
+
+test('anyone can mark a report returned via claim; admin can revert', async () => {
+  const fd = new FormData();
+  fd.set('plate', 'งจ 55'); fd.set('province', 'ตราด'); fd.set('vehicleType', 'motorcycle'); fd.set('lat', '12.24'); fd.set('lng', '102.51');
+  let r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
+  const { report } = await r.json();
+
+  const cf = new FormData(); cf.set('note', 'เจ้าของมารับแล้ว');
+  r = await fetch(BASE + '/api/reports/' + report.id + '/claim', { method: 'POST', body: cf });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.status, 'returned');
+  assert.equal(j.claim_note, 'เจ้าของมารับแล้ว');
+  assert.ok(j.claimed_at > 0);
+
+  // honeypot rejected
+  const hp = new FormData(); hp.set('website', 'x');
+  r = await fetch(BASE + '/api/reports/' + report.id + '/claim', { method: 'POST', body: hp });
+  assert.equal(r.status, 400);
+
+  // hidden from default search, visible with status=returned
+  r = await fetch(BASE + '/api/reports?plate=55');
+  assert.equal((await r.json()).count, 0);
+  r = await fetch(BASE + '/api/reports?plate=55&status=returned');
+  assert.equal((await r.json()).count, 1);
+
+  // admin reverts
+  r = await fetch(BASE + '/api/reports/' + report.id, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123', status: 'found' }) });
+  assert.equal((await r.json()).status, 'found');
+});
+
+test('ocr endpoint reports disabled without API key', async () => {
+  const fd = new FormData(); fd.set('photo', new Blob([new Uint8Array(10)], { type: 'image/jpeg' }), 'x.jpg');
+  const r = await fetch(BASE + '/api/ocr', { method: 'POST', body: fd });
+  assert.equal(r.status, 503);
+  assert.equal((await r.json()).error, 'ocr_disabled');
 });

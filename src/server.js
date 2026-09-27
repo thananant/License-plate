@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { openDatabase, toPublic } from './db.js';
 import { PROVINCES, PROVINCE_SET, VEHICLE_TYPES } from './provinces.js';
 import { normalizePlate, cleanPlateDisplay, isPlausiblePlate } from './plate.js';
+import { readPlates, ocrEnabled, OCR_MODEL } from './ocr.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -32,6 +33,7 @@ const TRUST_PROXY = String(process.env.TRUST_PROXY || 'false') === 'true';
 const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
 
+const RETURNED_TTL_DAYS = Number(process.env.RETURNED_TTL_DAYS || 30);
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const MAX_PHOTO_EDGE = 1600;
 const MAX_NOTE = 500;
@@ -92,6 +94,18 @@ app.use((_req, res, next) => {
 // Rate limits (kept in memory only; nothing is written to disk or logs).
 const readLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false });
 const writeLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+// AI reads cost money: tighter per-IP limit plus a global daily cap.
+const ocrLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 12, standardHeaders: 'draft-7', legacyHeaders: false });
+const OCR_DAILY_LIMIT = Number(process.env.OCR_DAILY_LIMIT || 500);
+let ocrDay = new Date().toISOString().slice(0, 10);
+let ocrCount = 0;
+function ocrBudgetOk() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== ocrDay) { ocrDay = today; ocrCount = 0; }
+  if (ocrCount >= OCR_DAILY_LIMIT) return false;
+  ocrCount += 1;
+  return true;
+}
 
 app.use(express.json({ limit: '32kb' }));
 
@@ -163,6 +177,7 @@ app.get('/api/config', readLimiter, (_req, res) => {
     provinces: PROVINCES,
     vehicleTypes: VEHICLE_TYPES,
     limits: { maxPhotoBytes: MAX_PHOTO_BYTES, maxNote: MAX_NOTE, maxPlaceNote: MAX_PLACE_NOTE },
+    ocrEnabled,
     totalFound: store.countFound(),
   });
 });
@@ -260,6 +275,53 @@ app.post('/api/reports', writeLimiter, (req, res, next) => {
   res.status(201).json({ report: toPublic(store.byId(id)), token });
 });
 
+// AI: read every plate in a photo. Returns suggestions for the user to review.
+app.post('/api/ocr', ocrLimiter, (req, res, next) => {
+  if (!ocrEnabled) return res.status(503).json({ error: 'ocr_disabled' });
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      const code = err.code === 'LIMIT_FILE_SIZE' ? 'photo_too_large' : err.message === 'unsupported_image' ? 'unsupported_image' : 'bad_upload';
+      return res.status(400).json({ error: code });
+    }
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_photo' });
+  if (!ocrBudgetOk()) return res.status(429).json({ error: 'ocr_budget' });
+  try {
+    const out = await readPlates(req.file.buffer);
+    res.json(out);
+  } catch (e) {
+    const code = e?.code || 'ocr_failed';
+    const status = code === 'ai_declined' ? 422 : code === 'ocr_disabled' ? 503 : 502;
+    res.status(status).json({ error: code });
+  }
+});
+
+// Anyone can mark a plate as returned to its owner (no code needed). It is not
+// deleted: it moves to the "returned" list and is purged after RETURNED_TTL_DAYS.
+// Moderators can revert with the admin token if this is abused.
+app.post('/api/reports/:id/claim', writeLimiter, (req, res, next) => {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      const code = err.code === 'LIMIT_FILE_SIZE' ? 'photo_too_large' : err.message === 'unsupported_image' ? 'unsupported_image' : 'bad_upload';
+      return res.status(400).json({ error: code });
+    }
+    next();
+  });
+}, async (req, res) => {
+  if (req.body?.website) return res.status(400).json({ error: 'rejected' });
+  const row = store.byId(String(req.params.id));
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  if (row.status === 'returned') return res.json(toPublic(row));
+  let photo = null;
+  if (req.file) {
+    try { photo = await processPhoto(req.file.buffer); } catch { return res.status(400).json({ error: 'bad_image' }); }
+  }
+  store.claim(row.id, { note: cleanText(req.body?.note, MAX_PLACE_NOTE), photo });
+  res.json(toPublic(store.byId(row.id)));
+});
+
 app.patch('/api/reports/:id', writeLimiter, (req, res) => {
   const row = store.byId(String(req.params.id));
   if (!checkToken(row, req.body?.token)) return res.status(403).json({ error: 'forbidden' });
@@ -274,12 +336,30 @@ app.delete('/api/reports/:id', writeLimiter, async (req, res) => {
   if (!checkToken(row, req.body?.token)) return res.status(403).json({ error: 'forbidden' });
   store.delete(row.id);
   await removePhoto(row.photo);
+  await removePhoto(row.claim_photo);
   res.status(204).end();
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 
 // ---------- static ----------
+// Cache busting: index.html is never cached; CSS/JS URLs carry a content hash
+// so every deploy is picked up on the next refresh.
+const PUBLIC_DIR = path.join(ROOT, 'public');
+const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js'];
+const assetHash = crypto.createHash('sha256');
+for (const f of ASSET_FILES) assetHash.update(await fs.readFile(path.join(PUBLIC_DIR, f)));
+const ASSET_VERSION = assetHash.digest('hex').slice(0, 10);
+const INDEX_HTML = (await fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8'))
+  .replace(/(href|src)="\/(css|js)\/([^"?]+)"/g, `$1="/$2/$3?v=${ASSET_VERSION}"`);
+
+function sendIndex(_req, res) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(INDEX_HTML);
+}
+app.get(['/', '/index.html'], sendIndex);
+
 app.use(
   '/uploads',
   express.static(UPLOAD_DIR, {
@@ -293,7 +373,17 @@ app.use(
     },
   }),
 );
-app.use(express.static(path.join(ROOT, 'public'), { index: 'index.html', dotfiles: 'deny', maxAge: '1h' }));
+app.use(
+  express.static(PUBLIC_DIR, {
+    index: false,
+    dotfiles: 'deny',
+    setHeaders: (res, filePath) => {
+      // Versioned assets can be cached for a long time; the ?v= changes on deploy.
+      const versioned = /\.(css|js)$/.test(filePath) && !filePath.includes('vendor');
+      res.setHeader('Cache-Control', versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=86400');
+    },
+  }),
+);
 
 // Generic error handler: never leak stack traces.
 // eslint-disable-next-line no-unused-vars
@@ -303,8 +393,19 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'server_error' });
 });
 
+// Housekeeping: drop returned reports (and their photos) after the TTL.
+async function purge() {
+  try {
+    const rows = store.purgeReturned(RETURNED_TTL_DAYS * 86_400_000);
+    for (const r of rows) { await removePhoto(r.photo); await removePhoto(r.claim_photo); }
+  } catch { /* ignore */ }
+}
+purge();
+const purgeTimer = setInterval(purge, 6 * 60 * 60_000);
+purgeTimer.unref();
+
 const server = app.listen(PORT, () => {
-  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'}, admin: ${ADMIN_TOKEN_HASH ? 'on' : 'off'})`);
+  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'}, admin: ${ADMIN_TOKEN_HASH ? 'on' : 'off'}, ai: ${ocrEnabled ? OCR_MODEL : 'off'})`);
   if (ADMIN_TOKEN && !ADMIN_TOKEN_HASH) console.warn('ADMIN_TOKEN ignored: must be at least 24 characters');
 });
 
