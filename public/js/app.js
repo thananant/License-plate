@@ -41,7 +41,6 @@
       const on = b.dataset.tab === name;
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', String(on));
-      if (on && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
     $$('.tabpane').forEach((p) => p.classList.toggle('active', p.dataset.pane === name));
     if (name === 'stats') loadStats();

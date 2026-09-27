@@ -212,9 +212,10 @@ dialog::backdrop { background: rgba(60, 20, 10, .45); backdrop-filter: blur(2px)
 @media (max-width: 800px) {
   .topbar { flex-wrap: wrap; padding: 10px 14px; gap: 10px; }
   .brand p { white-space: normal; }
-  .tabs { width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab { flex: 1 0 auto; padding: 9px 11px; font-size: 13px; }
+  /* two rows on phones: 3 tabs, then 2 wider ones (a scrolling strip is easy to miss) */
+  .tabs { width: 100%; display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; border-radius: 16px; padding: 5px; }
+  .tab { padding: 9px 4px; font-size: 13px; grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab:nth-child(4), .tab:nth-child(5) { grid-column: span 3; }
   .layout { grid-template-columns: 1fr; grid-template-rows: 42dvh 1fr; }
   .mapwrap { order: -1; }
   .panel { border-right: 0; border-radius: 20px 20px 0 0; margin-top: -18px; z-index: 2; box-shadow: 0 -8px 24px rgba(120,50,30,.12); }
