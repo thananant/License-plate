@@ -9,7 +9,7 @@
 
   async function start() {
     stop();
-    const constraints = { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+    const constraints = { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 3840 }, height: { ideal: 2160 } } };
     stream = await navigator.mediaDevices.getUserMedia(constraints);
     const v = $('#cam-video');
     v.srcObject = stream;
@@ -40,11 +40,29 @@
     return new Promise((resolve) => { resolver = resolve; });
   }
 
-  function shoot() {
+  async function shoot() {
     const v = $('#cam-video');
     if (!v.videoWidth) return;
+    $('#cam-shoot').disabled = true;
+    // Prefer the camera's full still-image resolution (Chrome/Android);
+    // fall back to grabbing the preview frame elsewhere.
+    if (window.ImageCapture && stream) {
+      try {
+        const track = stream.getVideoTracks()[0];
+        const blob = await new ImageCapture(track).takePhoto();
+        const bmp = await createImageBitmap(blob);
+        const maxEdge = 3200;
+        const sc = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        const file = await new Promise((res) => c.toBlob((b) => res(b && new File([b], `plate-${Date.now()}.jpg`, { type: 'image/jpeg' })), 'image/jpeg', 0.92));
+        $('#cam-shoot').disabled = false;
+        if (file) { close(file); return; }
+      } catch { /* fall through to frame grab */ }
+    }
+    $('#cam-shoot').disabled = false;
     const c = document.createElement('canvas');
-    const maxEdge = 2400;
+    const maxEdge = 3200;
     const sc = Math.min(1, maxEdge / Math.max(v.videoWidth, v.videoHeight));
     c.width = Math.round(v.videoWidth * sc); c.height = Math.round(v.videoHeight * sc);
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);

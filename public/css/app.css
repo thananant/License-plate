@@ -281,3 +281,16 @@ dialog::backdrop { background: rgba(60, 20, 10, .45); backdrop-filter: blur(2px)
 body.cam-open { overflow: hidden; }
 .preview { position: relative; }
 .preview #r-retake { position: absolute; right: 10px; bottom: 18px; background: rgba(255,255,255,.92); }
+
+.alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.alts button { font: inherit; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--white); cursor: pointer; }
+.alts button:hover { border-color: var(--red); color: var(--red-dark); }
+
+/* ============ help ============ */
+.help h3 { font-size: 20px; margin-bottom: 10px; color: var(--red-dark); }
+.help h4 { margin: 18px 0 8px; font-size: 15px; }
+.help ul { margin: 0 0 8px; padding-left: 20px; }
+.help li { margin-bottom: 8px; }
+.help .links a { color: var(--red-dark); font-weight: 600; }
+.help .warn { margin-top: 12px; }
+.panel-foot a { color: var(--ink-2); text-decoration: underline dotted; }

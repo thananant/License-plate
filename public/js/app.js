@@ -29,6 +29,10 @@
     if (name === 'report' && map && draft) map.setAccuracyCircle(draft, draftAccuracy);
   }
   $$('.tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  // The admin/manage pane has no tab: open it with #admin (footer link).
+  function checkAdminHash() { if (location.hash === '#admin') setTab('manage'); }
+  window.addEventListener('hashchange', checkAdminHash);
+  $('#admin-link').addEventListener('click', (e) => { e.preventDefault(); location.hash = 'admin'; checkAdminHash(); });
 
   // ---------- api ----------
   async function api(path, opts = {}) {
@@ -313,6 +317,7 @@
     }
   }
   $('#r-shoot').addEventListener('click', takePhoto);
+  window.PlateApp = { setPhoto }; // used by automated tests to inject a captured photo
   $('#r-retake').addEventListener('click', takePhoto);
 
   const AI_ERR = {
@@ -351,6 +356,7 @@
       st.textContent = `พบ ${out.plates.length} แผ่น` + (low ? ` · ${low} แผ่นควรตรวจสอบเป็นพิเศษ (กรอบสีเหลือง)` : ' · โปรดตรวจสอบก่อนส่ง');
       $('#plate-rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
+      console.warn('ocr failed', err);
       st.className = 'small'; st.style.color = 'var(--danger)';
       st.textContent = AI_ERR[err.message] || 'อ่านไม่สำเร็จ กรุณากรอกเอง';
     } finally {
@@ -379,6 +385,15 @@
     }
     const note = node.querySelector('.ai-note');
     if (data.note) { note.textContent = '💡 ' + data.note; note.hidden = false; }
+    const alts = node.querySelector('.alts');
+    if (Array.isArray(data.alternatives) && data.alternatives.length) {
+      data.alternatives.forEach((alt) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = alt;
+        b.addEventListener('click', () => { node.querySelector('.p-plate').value = alt; node.classList.remove('low'); });
+        alts.appendChild(b);
+      });
+      alts.hidden = false;
+    }
     node.querySelector('.remove-plate').addEventListener('click', () => {
       if ($$('.plate-row').length === 1) { node.querySelector('.p-plate').value = ''; sel.value = ''; node.classList.remove('low'); note.hidden = true; conf.remove(); return; }
       node.remove(); renumberRows();
@@ -538,6 +553,7 @@
       $('#map-fallback').hidden = false;
     }
     await runSearch({ fit: true });
+    checkAdminHash();
   }
   init();
 })();
