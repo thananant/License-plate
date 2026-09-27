@@ -147,10 +147,9 @@
     .replace(/\s+/g, ' ')
     .trim();
 
-  // 1กข 1234 | กข 1234. Thai plates never carry three letters or more than four
-  // digits; a third "letter" is usually a misread leading digit. Tesseract often
+  // 1กข 1234 | กข 1234 | กขค 123. Digits never exceed four. Tesseract often
   // emits a space between every Thai glyph, so match on the de-spaced text.
-  const PLATE_RE = /(\d)?([ก-ฮ]{1,3})[-.:_]?(\d{1,4})(?!\d)/;
+  const PLATE_RE = /(\d)?([ก-ฮ]{1,4})[-.:_]?(\d{1,4})(?!\d)/;
 
   function levenshtein(a, b) {
     const m = a.length, n = b.length;
@@ -198,13 +197,10 @@
       const provLine = prov && prov.score >= 0.75 && (!m || prov.province.includes(m[2]) && compact.indexOf(m[0]) >= compact.indexOf(prov.province.slice(0, 3)));
       if (m && !provLine) {
         const digits = m[3];
-        let letters = m[2];
-        let suspect = '';
-        if (letters.length === 3) { letters = letters.slice(1); suspect = 'ตัวหน้าอาจเป็นตัวเลข (เช่น 1) กรุณาตรวจสอบ'; }
+        const letters = m[2];
         plates.push({
           plate: `${m[1] || ''}${letters} ${digits}`.trim(),
           letters,
-          suspect,
           bbox: ln.bbox, conf: ln.confidence,
           province: prov && !compact.startsWith(m[0]) ? prov.province : '',
           provScore: prov ? prov.score : 0,
@@ -235,9 +231,9 @@
         plate: p.plate,
         province: p.province,
         vehicleType: 'car',
-        confidence: Math.round((p.suspect ? combined * 0.7 : combined) * 100) / 100,
-        note: [p.suspect, p.province ? '' : 'อ่านชื่อจังหวัดไม่ได้ กรุณาเลือกเอง'].filter(Boolean).join(' · '),
-        plausible: !p.suspect,
+        confidence: Math.round(combined * 100) / 100,
+        note: p.province ? '' : 'อ่านชื่อจังหวัดไม่ได้ กรุณาเลือกเอง',
+        plausible: true,
       };
     });
     // provinces we saw but could not pair with a number: still useful as a row to complete

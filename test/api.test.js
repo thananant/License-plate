@@ -30,7 +30,8 @@ test('plate normalisation', () => {
   assert.ok(isPlausiblePlate('กข1234'));
   assert.ok(isPlausiblePlate('1กข1234'));
   assert.ok(isPlausiblePlate('ก1'));
-  assert.ok(!isPlausiblePlate('กขค123'), 'three letters never occur');
+  assert.ok(isPlausiblePlate('กขค123'), 'three letters are allowed');
+  assert.ok(isPlausiblePlate('กขคง123'), 'four letters are allowed');
   assert.ok(!isPlausiblePlate('กข12345'), 'max four digits');
   assert.ok(!isPlausiblePlate('12กข1234'), 'only one leading digit');
   assert.ok(!isPlausiblePlate('กขคง'));

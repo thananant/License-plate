@@ -475,10 +475,10 @@
     // Radio groups must have unique names per row.
     rows.forEach((r, i) => r.querySelectorAll('.seg input').forEach((inp) => (inp.name = 'vt' + i)));
   }
-  // Mirrors the server rule: optional leading digit, 1-2 Thai letters, 1-4 digits (or Latin 1-3 letters + 1-4 digits).
+  // Mirrors the server rule: optional leading digit, 1-4 Thai letters, 1-4 digits (or Latin 1-3 letters + 1-4 digits).
   function plateLooksValid(display) {
     const n = display.normalize('NFC').replace(/[๐-๙]/g, (d) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(d))).toUpperCase().replace(/[^\u0E00-\u0E7FA-Z0-9]/g, '');
-    return /^\d?[ก-ฮ]{1,2}\d{1,4}$/.test(n) || /^[A-Z]{1,3}\d{1,4}$/.test(n);
+    return /^\d?[ก-ฮ]{1,4}\d{1,4}$/.test(n) || /^[A-Z]{1,3}\d{1,4}$/.test(n);
   }
   function readPlateRows() {
     return $$('.plate-row').map((r) => ({
@@ -509,7 +509,7 @@
     if (bad) { showError('กรุณากรอกเลขทะเบียนและจังหวัดให้ครบทุกแผ่น'); bad.el.querySelector(!bad.plate ? '.p-plate' : '.p-province').focus(); return; }
     if (rows.some((r) => r.plate.includes('?'))) { showError('มีเลขทะเบียนที่ยังมีเครื่องหมาย ? กรุณาแก้เป็นตัวอักษรที่ถูกต้อง'); return; }
     const badFormat = rows.find((r) => !plateLooksValid(r.plate));
-    if (badFormat) { showError(`เลขทะเบียน "${badFormat.plate}" ไม่ตรงรูปแบบ ป้ายไทยเป็น กข 1234 หรือ 1กข 1234 (ตัวอักษรไม่เกิน 2 ตัว ตัวเลขไม่เกิน 4 หลัก)`); badFormat.el.querySelector('.p-plate').focus(); return; }
+    if (badFormat) { showError(`เลขทะเบียน "${badFormat.plate}" ไม่ตรงรูปแบบ ตัวอย่างที่ถูกต้อง: กข 1234, 1กข 1234, กขค 123 (ตัวเลขไม่เกิน 4 หลัก)`); badFormat.el.querySelector('.p-plate').focus(); return; }
 
     if (cfg.photoRequired && !capturedPhoto) { showError('กรุณาถ่ายรูปป้ายก่อน (ขั้นที่ 1) รับเฉพาะรูปที่ถ่ายจากกล้องในแอป'); $('#r-shoot').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
@@ -554,7 +554,7 @@
         const f = err.body.fields;
         if (f.photo) msg = 'กรุณาถ่ายรูปป้ายก่อนส่ง';
         else if (f.plate === 'duplicate') msg = 'มีเลขทะเบียนซ้ำกันในรายการ กรุณาลบแผ่นที่ซ้ำ';
-        else if (f.plate) msg = 'เลขทะเบียนไม่ตรงรูปแบบ ป้ายไทยเป็น กข 1234 หรือ 1กข 1234 (ตัวอักษรไม่เกิน 2 ตัว ตัวเลขไม่เกิน 4 หลัก)';
+        else if (f.plate) msg = 'เลขทะเบียนไม่ตรงรูปแบบ ตัวอย่างที่ถูกต้อง: กข 1234, 1กข 1234, กขค 123 (ตัวเลขไม่เกิน 4 หลัก)';
         else if (f.province) msg = 'กรุณาเลือกจังหวัดให้ครบทุกแผ่น';
         else if (f.location) msg = 'พิกัดไม่ถูกต้อง กรุณาปักหมุดใหม่';
       }
