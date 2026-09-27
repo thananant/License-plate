@@ -14,7 +14,10 @@ No accounts, no cookies, no tracking, no IP logging.
 - **ค้นหา**: ค้นด้วยเลขทะเบียนบางส่วน (เช่นแค่ "1234"), จังหวัด, ประเภทรถ, สถานะ, หรือเฉพาะพื้นที่ที่แสดงบนแผนที่
   ระบบจับคู่ "กข 1234", "กข-1234", "กข1234" และเลขไทย "๑๒๓๔" ให้อัตโนมัติ
 - **นำทาง**: เปิดพิกัดใน Google Maps / OpenStreetMap ได้ทันที
-- **จัดการรายงาน**: ผู้แจ้งได้รับรหัสลับ 1 ชุดสำหรับทำเครื่องหมาย "คืนเจ้าของแล้ว" หรือลบรายงาน ไม่ต้องมีบัญชี
+- **AI อ่านป้ายจากรูป** (ถ้าตั้ง `ANTHROPIC_API_KEY`): ถ่ายรูปเดียวที่มีหลายแผ่นได้ AI แยกให้ทีละแผ่น พร้อมจังหวัดและประเภทรถ แสดงให้ตรวจแก้ก่อนส่ง แผ่นที่ AI ไม่มั่นใจจะขึ้นกรอบเหลือง
+- **หลายแผ่นในรายงานเดียว**: เพิ่มแผ่นได้ไม่จำกัด ใช้รูปและพิกัดร่วมกัน
+- **คืนเจ้าของแล้ว**: ใครก็กดได้จากหน้ารายละเอียด ไม่ต้องใช้รหัส (แนบรูป/หมายเหตุได้) รายการย้ายไปสถานะ "คืนแล้ว" และถูกลบอัตโนมัติหลัง `RETURNED_TTL_DAYS` วัน
+- **รหัสจัดการ (ทางเลือก)**: ผู้แจ้งได้รับรหัสลับสำหรับแก้/ลบเอง ซ่อนไว้ใต้ "ไม่บังคับ" ผู้ดูแลใช้ `ADMIN_TOKEN` แทนได้
 - **GPS ต่อเนื่อง**: กดปุ่มเดียว ระบบฟังตำแหน่งนานสุด 20 วินาที เก็บค่าที่แม่นที่สุด หยุดเองเมื่อคลาดเคลื่อน ≤ 5 ม.
 - **ผู้ดูแล**: ตั้ง `ADMIN_TOKEN` เพื่อลบรายงานสแปมได้โดยไม่ต้องมีระบบล็อกอิน
 - **แผนที่**: ใช้ Google Maps ถ้ามี API key หรือ OpenStreetMap (Leaflet) ถ้าไม่มี key
@@ -30,7 +33,8 @@ No accounts, no cookies, no tracking, no IP logging.
 | Headers | Helmet: CSP เข้มงวด, `Referrer-Policy: no-referrer`, ไม่มี `X-Powered-By`, `frame-ancestors 'none'` |
 | Input | ตรวจสอบทุกฟิลด์ฝั่งเซิร์ฟเวอร์, จำกัดความยาว, จังหวัดต้องอยู่ในรายชื่อ 77 จังหวัด, honeypot กันบอท |
 | Rate limit | อ่าน 120 ครั้ง/นาที, เขียน 20 ครั้ง/ชั่วโมง ต่อ IP |
-| Third‑party | Leaflet ถูก vendor ไว้ในโปรเจกต์ ไม่โหลดจาก CDN; ติดต่อภายนอกเฉพาะ tile server / Google Maps |
+| Third‑party | Leaflet ถูก vendor ไว้ในโปรเจกต์ ไม่โหลดจาก CDN; ติดต่อภายนอกเฉพาะ tile server / Google Maps และ Anthropic API (เฉพาะรูปที่ผู้ใช้กด "อ่านด้วย AI") |
+| Cache | index.html ไม่แคช, CSS/JS มี content hash ใน URL ทุก deploy ผู้ใช้เห็นเวอร์ชันใหม่ทันทีที่รีเฟรช |
 | Docker | read‑only filesystem, non‑root user, `logging: none` |
 
 ### ทำอย่างไรให้ "ตามหาผู้สร้างระบบไม่ได้"
@@ -38,6 +42,7 @@ No accounts, no cookies, no tracking, no IP logging.
 โค้ดนี้ไม่มีชื่อผู้เขียน, ไม่มี analytics, ไม่มี tracking, และปล่อยเป็น public domain (Unlicense)
 แต่ **การซ่อนตัวตนขึ้นกับวิธี deploy มากกว่าโค้ด** ควรพิจารณา:
 
+0. **AI อ่านป้ายต้องใช้ Anthropic API key** ซึ่งผูกกับบัญชีที่มีวิธีชำระเงิน ถ้าต้องการนิรนามสูงสุด ปล่อยว่างไว้ ผู้ใช้กรอกเองได้
 1. **อย่าใช้ Google Maps API key ถ้าต้องการนิรนามสูงสุด** — key ผูกกับบัญชี Google Cloud ซึ่งต้องมีบัตรเครดิต
    ปล่อย `GOOGLE_MAPS_API_KEY` ว่างไว้ ระบบจะใช้ OpenStreetMap แทนโดยอัตโนมัติ (ไม่ต้องสมัครอะไรเลย)
    ถ้าใช้ Google Maps ให้จำกัด key ด้วย HTTP referrer และเปิดเฉพาะ Maps JavaScript API
@@ -91,6 +96,10 @@ docker compose up -d --build
 | `MAP_CENTER_LAT` / `MAP_CENTER_LNG` / `MAP_ZOOM` | กรุงเทพฯ / 6 | จุดเริ่มต้นของแผนที่ |
 | `TRUST_PROXY` | `false` | ตั้ง `true` เมื่ออยู่หลัง nginx/Cloudflare เพื่อให้ rate limit เห็น IP จริง |
 | `ADMIN_TOKEN` | ว่าง | รหัสผู้ดูแล (≥24 ตัวอักษร) ใส่แทนรหัสจัดการในหน้า "จัดการรายงาน" เพื่อลบ/แก้สถานะรายงานใดก็ได้ ใช้ลบสแปม |
+| `ANTHROPIC_API_KEY` | ว่าง | เปิดใช้ AI อ่านป้ายจากรูป (Claude vision) ว่าง = ปิด กรอกเองได้ตามปกติ |
+| `OCR_MODEL` | `claude-opus-5` | โมเดลที่ใช้อ่านป้าย เปลี่ยนเป็น `claude-sonnet-5` หรือ `claude-haiku-4-5` เพื่อลดค่าใช้จ่าย |
+| `OCR_DAILY_LIMIT` | `500` | เพดานจำนวนครั้งที่เรียก AI ต่อวัน (กันค่าใช้จ่ายบาน) นอกจากนี้จำกัด 12 ครั้ง/ชม./IP |
+| `RETURNED_TTL_DAYS` | `30` | รายการที่ "คืนแล้ว" ถูกลบอัตโนมัติ (พร้อมรูป) หลังจากนี้ |
 
 ### ตัวอย่าง reverse proxy (Caddy)
 
@@ -110,6 +119,8 @@ plates.example.org {
 | `GET` | `/api/config` | การตั้งค่าแผนที่, รายชื่อจังหวัด, จำนวนรายงาน |
 | `GET` | `/api/reports?plate=&province=&type=&status=&bbox=S,W,N,E&limit=` | ค้นหา (`status` = `found` (default) / `returned` / `all`) |
 | `GET` | `/api/reports/:id` | รายงานเดียว |
+| `POST` | `/api/ocr` | multipart `photo` → `{ plates: [{ plate, province, vehicleType, confidence, note, plausible }] }` (503 ถ้าไม่ได้ตั้ง key) |
+| `POST` | `/api/reports/:id/claim` | multipart `note?`, `photo?` → ทำเครื่องหมายคืนเจ้าของแล้ว (สาธารณะ ไม่ต้องใช้รหัส) |
 | `POST` | `/api/reports` | สร้างรายงาน (multipart: `plate`, `province`, `vehicleType`, `lat`, `lng`, `accuracy?`, `placeNote?`, `note?`, `photo?`) → คืน `{ report, token }` |
 | `PATCH` | `/api/reports/:id` | `{ token, status: "found" \| "returned" }` |
 | `DELETE` | `/api/reports/:id` | `{ token }` ลบรายงานและรูป |
@@ -125,6 +136,7 @@ npm test
 ```
 src/server.js     Express API, security headers, upload processing
 src/db.js         SQLite (better-sqlite3) schema + queries
+src/ocr.js        AI อ่านป้ายจากรูป (Claude vision, structured output)
 src/plate.js      normalise เลขทะเบียนสำหรับค้นหา
 src/provinces.js  77 จังหวัด
 public/           หน้าเว็บ (vanilla JS, ไม่มี build step)
