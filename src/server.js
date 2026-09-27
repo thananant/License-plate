@@ -12,6 +12,7 @@ import { openDatabase, toPublic } from './db.js';
 import { PROVINCES, PROVINCE_SET, VEHICLE_TYPES } from './provinces.js';
 import { normalizePlate, cleanPlateDisplay, isPlausiblePlate } from './plate.js';
 import { readPlates, ocrEnabled, OCR_MODEL } from './ocr.js';
+import { dhash, hamming } from './phash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -34,6 +35,12 @@ const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
 
 const RETURNED_TTL_DAYS = Number(process.env.RETURNED_TTL_DAYS || 30);
+// A report must carry a photo taken in-app (set "false" to allow text-only reports).
+const PHOTO_REQUIRED = String(process.env.PHOTO_REQUIRED ?? 'true') !== 'false';
+// Same/near-same photo re-submitted within this window is rejected as a duplicate.
+const DUPLICATE_WINDOW_DAYS = Number(process.env.DUPLICATE_WINDOW_DAYS || 90);
+const DUPLICATE_MAX_DISTANCE = 6; // hamming bits out of 64
+const MAX_PLATES_PER_REPORT = 20;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const MAX_PHOTO_EDGE = 1600;
 const MAX_NOTE = 500;
@@ -162,6 +169,7 @@ async function processPhoto(buffer) {
 
 async function removePhoto(name) {
   if (!name) return;
+  if (store.photoInUse(name)) return; // still referenced by another plate from the same photo
   try {
     await fs.unlink(path.join(UPLOAD_DIR, path.basename(name)));
   } catch {
@@ -179,6 +187,8 @@ app.get('/api/config', readLimiter, (_req, res) => {
     vehicleTypes: VEHICLE_TYPES,
     limits: { maxPhotoBytes: MAX_PHOTO_BYTES, maxNote: MAX_NOTE, maxPlaceNote: MAX_PLACE_NOTE },
     ocrEnabled,
+    photoRequired: PHOTO_REQUIRED,
+    maxPlates: MAX_PLATES_PER_REPORT,
     totalFound: store.countFound(),
   });
 });
@@ -224,23 +234,57 @@ app.post('/api/reports', writeLimiter, (req, res, next) => {
   // Honeypot: real users never fill this hidden field.
   if (b.website) return res.status(400).json({ error: 'rejected' });
 
-  const plateDisplay = cleanPlateDisplay(b.plate ?? '');
-  const plateNorm = normalizePlate(plateDisplay);
-  const province = String(b.province ?? '').trim();
-  const vehicleType = String(b.vehicleType ?? '').trim();
+  // Accept either a single plate (plate/province/vehicleType) or `plates`:
+  // a JSON array of {plate, province, vehicleType} sharing one photo/location.
+  let items;
+  if (typeof b.plates === 'string') {
+    try { items = JSON.parse(b.plates); } catch { return res.status(400).json({ error: 'bad_json' }); }
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'validation' });
+  } else {
+    items = [{ plate: b.plate, province: b.province, vehicleType: b.vehicleType }];
+  }
+  if (items.length < 1 || items.length > MAX_PLATES_PER_REPORT) return res.status(400).json({ error: 'validation', fields: { plates: 'count' } });
+
   const lat = parseCoord(b.lat, -90, 90);
   const lng = parseCoord(b.lng, -180, 180);
   const accuracy = b.accuracy != null && b.accuracy !== '' ? parseCoord(b.accuracy, 0, 100000) : null;
 
   const errors = {};
-  if (!isPlausiblePlate(plateNorm) || plateDisplay.length > 20) errors.plate = 'invalid';
-  if (!PROVINCE_SET.has(province)) errors.province = 'invalid';
-  if (!VEHICLE_TYPES.includes(vehicleType)) errors.vehicleType = 'invalid';
   if (lat == null || lng == null) errors.location = 'invalid';
+  if (PHOTO_REQUIRED && !req.file) errors.photo = 'required';
+  const parsed = items.map((it, i) => {
+    const plateDisplay = cleanPlateDisplay(it?.plate ?? '');
+    const plateNorm = normalizePlate(plateDisplay);
+    const province = String(it?.province ?? '').trim();
+    const vehicleType = String(it?.vehicleType ?? '').trim();
+    const e = {};
+    if (!isPlausiblePlate(plateNorm) || plateDisplay.length > 20 || plateDisplay.includes('?')) e.plate = 'invalid';
+    if (!PROVINCE_SET.has(province)) e.province = 'invalid';
+    if (!VEHICLE_TYPES.includes(vehicleType)) e.vehicleType = 'invalid';
+    if (Object.keys(e).length) { errors.plates = errors.plates || {}; errors.plates[i] = e; Object.assign(errors, e); }
+    return { plateDisplay, plateNorm, province, vehicleType };
+  });
+  // the same plate twice in one submission is a mistake, not two plates
+  const keys = new Set();
+  for (const p of parsed) { const k = p.plateNorm + '|' + p.province; if (keys.has(k)) errors.plate = 'duplicate'; keys.add(k); }
   if (Object.keys(errors).length) return res.status(400).json({ error: 'validation', fields: errors });
 
   let photo = null;
+  let photoHash = null;
   if (req.file) {
+    try {
+      photoHash = await dhash(req.file.buffer);
+    } catch {
+      return res.status(400).json({ error: 'bad_image' });
+    }
+    const dup = store.recentHashes(DUPLICATE_WINDOW_DAYS * 86_400_000)
+      .filter((r) => hamming(r.photo_hash, photoHash) <= DUPLICATE_MAX_DISTANCE);
+    if (dup.length) {
+      return res.status(409).json({
+        error: 'duplicate_photo',
+        existing: dup.slice(0, 5).map((r) => ({ id: r.id, plate_display: r.plate_display, province: r.province })),
+      });
+    }
     try {
       photo = await processPhoto(req.file.buffer);
     } catch {
@@ -248,32 +292,38 @@ app.post('/api/reports', writeLimiter, (req, res, next) => {
     }
   }
 
-  const id = newId();
-  const token = newToken();
   const now = Date.now();
-  const row = {
-    id,
-    plate_display: plateDisplay,
-    plate_norm: plateNorm,
-    province,
-    vehicle_type: vehicleType,
-    lat,
-    lng,
-    accuracy_m: accuracy,
-    place_note: cleanText(b.placeNote, MAX_PLACE_NOTE),
-    note: cleanText(b.note, MAX_NOTE),
-    photo,
-    token_hash: sha256(token),
-    created_at: now,
-    updated_at: now,
-  };
+  const rows = parsed.map((p) => {
+    const token = newToken();
+    return {
+      token,
+      row: {
+        id: newId(),
+        plate_display: p.plateDisplay,
+        plate_norm: p.plateNorm,
+        province: p.province,
+        vehicle_type: p.vehicleType,
+        lat,
+        lng,
+        accuracy_m: accuracy,
+        place_note: cleanText(b.placeNote, MAX_PLACE_NOTE),
+        note: cleanText(b.note, MAX_NOTE),
+        photo,
+        photo_hash: photoHash,
+        token_hash: sha256(token),
+        created_at: now,
+        updated_at: now,
+      },
+    };
+  });
   try {
-    store.insert(row);
+    store.insertMany(rows.map((r) => r.row));
   } catch {
     await removePhoto(photo);
     return res.status(500).json({ error: 'server_error' });
   }
-  res.status(201).json({ report: toPublic(store.byId(id)), token });
+  const reports = rows.map((r) => ({ report: toPublic(store.byId(r.row.id)), token: r.token }));
+  res.status(201).json({ reports, report: reports[0].report, token: reports[0].token });
 });
 
 // AI: read every plate in a photo. Returns suggestions for the user to review.
@@ -347,7 +397,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 // Cache busting: index.html is never cached; CSS/JS URLs carry a content hash
 // so every deploy is picked up on the next refresh.
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js', 'js/ocr-local.js'];
+const ASSET_FILES = ['css/app.css', 'js/app.js', 'js/map.js', 'js/ocr-local.js', 'js/camera.js'];
 const assetHash = crypto.createHash('sha256');
 for (const f of ASSET_FILES) assetHash.update(await fs.readFile(path.join(PUBLIC_DIR, f)));
 const ASSET_VERSION = assetHash.digest('hex').slice(0, 10);

@@ -16,7 +16,9 @@ No accounts, no cookies, no tracking, no IP logging.
 - **นำทาง**: เปิดพิกัดใน Google Maps / OpenStreetMap ได้ทันที
 - **อ่านป้ายจากรูปอัตโนมัติ (ฟรี ไม่ต้องมีบัญชี)**: Tesseract.js + โมเดลภาษาไทย รันในเบราว์เซอร์ของผู้ใช้ รูปไม่ออกจากเครื่อง ระบบหาแผ่นป้ายทุกแผ่นในรูป (ตรวจจับสี่เหลี่ยมสว่าง) ตัดแต่ละแผ่นมาอ่านเลขและจังหวัดแยกกัน แสดงให้ตรวจแก้ก่อนส่ง แผ่นที่ไม่มั่นใจขึ้นกรอบเหลือง โหลดครั้งแรกประมาณ 5 MB แล้วแคชไว้
 - **ทางเลือกเสียเงิน แม่นกว่า**: ตั้ง `ANTHROPIC_API_KEY` เพื่อสลับไปใช้ Claude vision แทน (ต้องมีบัญชี Anthropic)
-- **หลายแผ่นในรายงานเดียว**: เพิ่มแผ่นได้ไม่จำกัด ใช้รูปและพิกัดร่วมกัน
+- **ถ่ายจากกล้องในแอปเท่านั้น**: ไม่มีปุ่มเลือกไฟล์ รูปต้องถ่ายสดผ่านกล้องในหน้าเว็บ (getUserMedia) กันรูปจากคลัง/ภาพหน้าจอ/รูปมั่ว บังคับต้องมีรูป (ปิดได้ด้วย `PHOTO_REQUIRED=false`)
+- **กันรูปซ้ำ**: เซิร์ฟเวอร์คำนวณ perceptual hash (dHash) ของทุกรูป รูปเดิมที่ถูกย่อ/บีบอัด/ส่งซ้ำภายใน `DUPLICATE_WINDOW_DAYS` วันจะถูกปฏิเสธ (409) พร้อมชี้ไปรายการเดิม
+- **หลายแผ่นในรายงานเดียว**: เพิ่มแผ่นได้สูงสุด 20 แผ่น ส่งครั้งเดียว เก็บรูปไฟล์เดียวร่วมกัน (ลบแผ่นหนึ่งรูปยังอยู่ให้แผ่นอื่น)
 - **คืนเจ้าของแล้ว**: ใครก็กดได้จากหน้ารายละเอียด ไม่ต้องใช้รหัส (แนบรูป/หมายเหตุได้) รายการย้ายไปสถานะ "คืนแล้ว" และถูกลบอัตโนมัติหลัง `RETURNED_TTL_DAYS` วัน
 - **รหัสจัดการ (ทางเลือก)**: ผู้แจ้งได้รับรหัสลับสำหรับแก้/ลบเอง ซ่อนไว้ใต้ "ไม่บังคับ" ผู้ดูแลใช้ `ADMIN_TOKEN` แทนได้
 - **GPS ต่อเนื่อง**: กดปุ่มเดียว ระบบฟังตำแหน่งนานสุด 20 วินาที เก็บค่าที่แม่นที่สุด หยุดเองเมื่อคลาดเคลื่อน ≤ 5 ม.
@@ -29,7 +31,7 @@ No accounts, no cookies, no tracking, no IP logging.
 | --- | --- |
 | ข้อมูลผู้ใช้ | ไม่มีบัญชี ไม่มีอีเมล ไม่มีเบอร์โทร ไม่มีคุกกี้ ไม่มี localStorage |
 | IP address | ไม่บันทึกลงดิสก์ ใช้ในหน่วยความจำเพื่อจำกัดอัตราส่ง (rate limit) เท่านั้น |
-| รูปภาพ | แปลงใหม่ทั้งหมดด้วย sharp → ลบ EXIF/GPS/metadata ทิ้ง, ย่อขนาด, ตั้งชื่อไฟล์แบบสุ่ม |
+| รูปภาพ | ถ่ายจากกล้องในแอปเท่านั้น; แปลงใหม่ด้วย sharp → ลบ EXIF/GPS/metadata, ย่อขนาด, ชื่อไฟล์สุ่ม; dHash กันรูปซ้ำ |
 | การแก้ไข/ลบ | ใช้ token สุ่ม 192 บิต เก็บเฉพาะ SHA‑256 hash เปรียบเทียบแบบ timing-safe |
 | Headers | Helmet: CSP เข้มงวด, `Referrer-Policy: no-referrer`, ไม่มี `X-Powered-By`, `frame-ancestors 'none'` |
 | Input | ตรวจสอบทุกฟิลด์ฝั่งเซิร์ฟเวอร์, จำกัดความยาว, จังหวัดต้องอยู่ในรายชื่อ 77 จังหวัด, honeypot กันบอท |
@@ -100,6 +102,8 @@ docker compose up -d --build
 | `ANTHROPIC_API_KEY` | ว่าง | ว่าง = ใช้ Tesseract ในเบราว์เซอร์ (ฟรี) ถ้าใส่ = สลับไปใช้ Claude vision ฝั่งเซิร์ฟเวอร์ |
 | `OCR_MODEL` | `claude-opus-5` | โมเดลที่ใช้อ่านป้าย เปลี่ยนเป็น `claude-sonnet-5` หรือ `claude-haiku-4-5` เพื่อลดค่าใช้จ่าย |
 | `OCR_DAILY_LIMIT` | `500` | เพดานจำนวนครั้งที่เรียก AI ต่อวัน (กันค่าใช้จ่ายบาน) นอกจากนี้จำกัด 12 ครั้ง/ชม./IP |
+| `PHOTO_REQUIRED` | `true` | บังคับต้องมีรูปจากกล้องในแอปทุกรายงาน |
+| `DUPLICATE_WINDOW_DAYS` | `90` | ช่วงเวลาที่ถือว่ารูปเดิมซ้ำ (เทียบ dHash ต่างกันไม่เกิน 6 บิต) |
 | `RETURNED_TTL_DAYS` | `30` | รายการที่ "คืนแล้ว" ถูกลบอัตโนมัติ (พร้อมรูป) หลังจากนี้ |
 
 ### ตัวอย่าง reverse proxy (Caddy)
@@ -122,7 +126,7 @@ plates.example.org {
 | `GET` | `/api/reports/:id` | รายงานเดียว |
 | `POST` | `/api/ocr` | multipart `photo` → `{ plates: [{ plate, province, vehicleType, confidence, note, plausible }] }` (503 ถ้าไม่ได้ตั้ง key) |
 | `POST` | `/api/reports/:id/claim` | multipart `note?`, `photo?` → ทำเครื่องหมายคืนเจ้าของแล้ว (สาธารณะ ไม่ต้องใช้รหัส) |
-| `POST` | `/api/reports` | สร้างรายงาน (multipart: `plate`, `province`, `vehicleType`, `lat`, `lng`, `accuracy?`, `placeNote?`, `note?`, `photo?`) → คืน `{ report, token }` |
+| `POST` | `/api/reports` | สร้างรายงาน (multipart: `plates` = JSON `[{plate, province, vehicleType}]` หรือ `plate`/`province`/`vehicleType` เดี่ยว, `lat`, `lng`, `accuracy?`, `placeNote?`, `note?`, `photo` (บังคับเมื่อ `PHOTO_REQUIRED`)) → `{ reports: [{ report, token }] }` • 409 `duplicate_photo` ถ้ารูปซ้ำ |
 | `PATCH` | `/api/reports/:id` | `{ token, status: "found" \| "returned" }` |
 | `DELETE` | `/api/reports/:id` | `{ token }` ลบรายงานและรูป |
 
@@ -142,6 +146,8 @@ src/plate.js      normalise เลขทะเบียนสำหรับค�
 src/provinces.js  77 จังหวัด
 public/           หน้าเว็บ (vanilla JS, ไม่มี build step)
 public/js/map.js  ตัวกลางแผนที่ Google Maps / Leaflet
+public/js/camera.js     กล้องในแอป (ทางเดียวที่แนบรูปได้)
+src/phash.js      dHash + hamming สำหรับกันรูปซ้ำ
 public/js/ocr-local.js  OCR ในเบราว์เซอร์: หาแผ่นป้าย → ตัด → Tesseract → จับคู่จังหวัด
 public/vendor/    Leaflet 1.9.4 (BSD-2), Tesseract.js 7 + core WASM + tha.traineddata (Apache-2.0)
 test/             API tests (node:test)

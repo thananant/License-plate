@@ -286,18 +286,34 @@
     }
   }
 
-  // ---------- report: photo preview + AI ----------
-  $('#r-photo').addEventListener('change', () => {
-    const f = $('#r-photo').files[0];
-    const box = $('#r-preview'); box.innerHTML = ''; box.hidden = true;
+  // ---------- report: photo (in-app camera only) ----------
+  let capturedPhoto = null; // File taken with the in-app camera
+  const CAM_ERR = {
+    camera_unsupported: 'เบราว์เซอร์นี้ไม่รองรับกล้อง กรุณาใช้ Chrome หรือ Safari บนมือถือ',
+    camera_insecure: 'ต้องเปิดผ่าน https จึงจะใช้กล้องได้',
+    camera_denied: 'ไม่ได้รับอนุญาตให้ใช้กล้อง กรุณาอนุญาตในตั้งค่าเบราว์เซอร์แล้วลองใหม่',
+    camera_failed: 'เปิดกล้องไม่สำเร็จ ลองปิดแอปอื่นที่ใช้กล้องอยู่แล้วลองใหม่',
+  };
+  function setPhoto(file) {
+    capturedPhoto = file;
+    const box = $('#r-preview'); const img = $('#r-preview-img');
     $('#ai-box').hidden = true; $('#ai-status').textContent = '';
-    if (!f) return;
-    if (f.size > cfg.limits.maxPhotoBytes) { showError('รูปใหญ่เกิน 8 MB'); $('#r-photo').value = ''; return; }
-    const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.alt = 'ตัวอย่างรูป';
+    if (!file) { box.hidden = true; img.removeAttribute('src'); $('#r-shoot').hidden = false; return; }
+    img.src = URL.createObjectURL(file);
     img.onload = () => URL.revokeObjectURL(img.src);
-    box.appendChild(img); box.hidden = false;
-    $('#ai-box').hidden = false;
-  });
+    box.hidden = false; $('#r-shoot').hidden = true; $('#ai-box').hidden = false;
+  }
+  async function takePhoto() {
+    const msg = $('#cam-msg'); msg.hidden = true;
+    try {
+      const file = await window.AppCamera.open();
+      if (file) setPhoto(file);
+    } catch (e) {
+      msg.textContent = CAM_ERR[e.message] || CAM_ERR.camera_failed; msg.hidden = false;
+    }
+  }
+  $('#r-shoot').addEventListener('click', takePhoto);
+  $('#r-retake').addEventListener('click', takePhoto);
 
   const AI_ERR = {
     ocr_disabled: 'ระบบอ่านอัตโนมัติยังไม่เปิดใช้งาน กรุณากรอกเอง',
@@ -308,7 +324,7 @@
     bad_image: 'อ่านไฟล์รูปไม่ได้ ลองถ่ายใหม่',
   };
   $('#r-ai').addEventListener('click', async () => {
-    const f = $('#r-photo').files[0];
+    const f = capturedPhoto;
     if (!f) return;
     const btn = $('#r-ai'); const st = $('#ai-status');
     btn.disabled = true; st.className = 'small spin'; st.style.color = '';
@@ -394,6 +410,7 @@
   const ERR = {
     validation: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง',
     photo_too_large: 'รูปใหญ่เกิน 8 MB',
+    duplicate_photo: 'รูปนี้เคยถูกแจ้งไว้แล้ว',
     unsupported_image: 'รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG, WEBP, HEIC)',
     bad_image: 'อ่านไฟล์รูปไม่ได้ ลองถ่ายใหม่หรือเลือกรูปอื่น',
     http_429: 'ส่งบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -407,36 +424,38 @@
     if (bad) { showError('กรุณากรอกเลขทะเบียนและจังหวัดให้ครบทุกแผ่น'); bad.el.querySelector(!bad.plate ? '.p-plate' : '.p-province').focus(); return; }
     if (rows.some((r) => r.plate.includes('?'))) { showError('มีเลขทะเบียนที่ยังมีเครื่องหมาย ? กรุณาแก้เป็นตัวอักษรที่ถูกต้อง'); return; }
 
+    if (cfg.photoRequired && !capturedPhoto) { showError('กรุณาถ่ายรูปป้ายก่อน (ขั้นที่ 1) รับเฉพาะรูปที่ถ่ายจากกล้องในแอป'); $('#r-shoot').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+
     const form = $('#report-form');
-    const btn = $('#r-submit'); btn.disabled = true;
-    const photo = $('#r-photo').files[0] || null;
-    const created = [];
+    const btn = $('#r-submit'); btn.disabled = true; btn.textContent = rows.length > 1 ? `กำลังส่ง ${rows.length} แผ่น…` : 'กำลังส่ง…';
     try {
-      for (let i = 0; i < rows.length; i++) {
-        btn.textContent = rows.length > 1 ? `กำลังส่ง ${i + 1}/${rows.length}…` : 'กำลังส่ง…';
-        const fd = new FormData();
-        fd.set('plate', rows[i].plate); fd.set('province', rows[i].province); fd.set('vehicleType', rows[i].vehicleType);
-        fd.set('lat', fmt7(draft.lat)); fd.set('lng', fmt7(draft.lng));
-        fd.set('accuracy', $('#r-accuracy').value); fd.set('placeNote', $('#r-place').value); fd.set('note', $('#r-note').value);
-        fd.set('website', form.elements.website.value);
-        if (photo) fd.set('photo', photo);
-        const out = await api('/api/reports', { method: 'POST', body: fd });
-        created.push(out);
-        rows[i].el.remove();
-      }
-      showSuccess(created);
+      const fd = new FormData();
+      fd.set('plates', JSON.stringify(rows.map((r) => ({ plate: r.plate, province: r.province, vehicleType: r.vehicleType }))));
+      fd.set('lat', fmt7(draft.lat)); fd.set('lng', fmt7(draft.lng));
+      fd.set('accuracy', $('#r-accuracy').value); fd.set('placeNote', $('#r-place').value); fd.set('note', $('#r-note').value);
+      fd.set('website', form.elements.website.value);
+      if (capturedPhoto) fd.set('photo', capturedPhoto, capturedPhoto.name);
+      const out = await api('/api/reports', { method: 'POST', body: fd });
+      showSuccess(out.reports);
       draft = null; draftAccuracy = null; map?.setDraft(null); map?.setAccuracyCircle(null);
       runSearch();
     } catch (err) {
-      renumberRows();
       let msg = ERR[err.message] || 'ส่งไม่สำเร็จ กรุณาลองใหม่';
+      if (err.message === 'duplicate_photo') {
+        const ex = err.body?.existing || [];
+        msg = 'รูปนี้เคยถูกแจ้งไว้แล้ว' + (ex.length ? ` (${ex.map((e) => e.plate_display + ' ' + e.province).join(', ')})` : '') + ' ถ้าเป็นป้ายคนละแผ่น กรุณาถ่ายรูปใหม่';
+        showError(msg);
+        if (ex[0]) { const a = document.createElement('a'); a.href = '#'; a.textContent = ' ดูรายการเดิม'; a.onclick = (ev) => { ev.preventDefault(); api('/api/reports/' + encodeURIComponent(ex[0].id)).then(openDetail).catch(() => {}); }; $('#r-error').appendChild(a); }
+        return;
+      }
       if (err.body?.fields) {
         const f = err.body.fields;
-        if (f.plate) msg = 'เลขทะเบียนไม่ถูกต้อง (ต้องมีตัวเลขอย่างน้อย 1 ตัว)';
-        else if (f.province) msg = 'กรุณาเลือกจังหวัด';
+        if (f.photo) msg = 'กรุณาถ่ายรูปป้ายก่อนส่ง';
+        else if (f.plate === 'duplicate') msg = 'มีเลขทะเบียนซ้ำกันในรายการ กรุณาลบแผ่นที่ซ้ำ';
+        else if (f.plate) msg = 'เลขทะเบียนไม่ถูกต้อง (ต้องมีตัวเลขอย่างน้อย 1 ตัว และไม่มี ?)';
+        else if (f.province) msg = 'กรุณาเลือกจังหวัดให้ครบทุกแผ่น';
         else if (f.location) msg = 'พิกัดไม่ถูกต้อง กรุณาปักหมุดใหม่';
       }
-      if (created.length) { showSuccess(created); msg = `ส่งสำเร็จ ${created.length} แผ่น แต่แผ่นที่เหลือไม่สำเร็จ: ${msg}`; }
       showError(msg);
     } finally {
       btn.disabled = false; btn.textContent = 'ส่งรายงาน';
@@ -458,8 +477,7 @@
     $('#r-success').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   $('#ok-another').addEventListener('click', () => {
-    $('#report-form').reset(); $('#r-preview').hidden = true; $('#r-preview').innerHTML = '';
-    $('#ai-box').hidden = true; $('#ai-status').textContent = '';
+    $('#report-form').reset(); setPhoto(null);
     $('#plate-rows').innerHTML = ''; addPlateRow();
     $('#r-locstatus').textContent = 'ยังไม่ได้ปักหมุด'; $('#r-locstatus').className = 'muted';
     $('#report-form').hidden = false; $('#r-success').hidden = true;
@@ -506,6 +524,7 @@
     }
     fillProvinces();
     addPlateRow();
+    if (!cfg.photoRequired) { $('#s1-req').hidden = true; $('#s1-hint').textContent = 'ไม่บังคับ • ถ่ายจากกล้องเท่านั้น'; }
     if (cfg.ocrEnabled) $('#s1-note').textContent = 'ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ';
     try {
       map = await window.PlateMap.createMap($('#map'), cfg);

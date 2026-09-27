@@ -34,22 +34,25 @@ export function openDatabase(dataDir) {
 
   // Lightweight migrations for databases created before these columns existed.
   const cols = new Set(db.prepare('PRAGMA table_info(reports)').all().map((c) => c.name));
-  for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER']]) {
+  for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER'], ['photo_hash', 'TEXT']]) {
     if (!cols.has(name)) db.exec(`ALTER TABLE reports ADD COLUMN ${name} ${type}`);
   }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_reports_photo_hash ON reports(photo_hash)');
 
   const stmts = {
     insert: db.prepare(`
       INSERT INTO reports (id, plate_display, plate_norm, province, vehicle_type, lat, lng,
-        accuracy_m, place_note, note, photo, status, token_hash, created_at, updated_at)
+        accuracy_m, place_note, note, photo, photo_hash, status, token_hash, created_at, updated_at)
       VALUES (@id, @plate_display, @plate_norm, @province, @vehicle_type, @lat, @lng,
-        @accuracy_m, @place_note, @note, @photo, 'found', @token_hash, @created_at, @updated_at)
+        @accuracy_m, @place_note, @note, @photo, @photo_hash, 'found', @token_hash, @created_at, @updated_at)
     `),
     byId: db.prepare(`SELECT * FROM reports WHERE id = ?`),
     setStatus: db.prepare(`UPDATE reports SET status = ?, updated_at = ? WHERE id = ?`),
     claim: db.prepare(`UPDATE reports SET status = 'returned', claim_note = @claim_note, claim_photo = @claim_photo,
       claimed_at = @now, updated_at = @now WHERE id = @id`),
     expired: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'returned' AND updated_at < ?`),
+    recentHashes: db.prepare(`SELECT id, photo_hash, plate_display, province FROM reports WHERE photo_hash IS NOT NULL AND created_at > ?`),
+    photoRefs: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE photo = ? OR claim_photo = ?`),
     delete: db.prepare(`DELETE FROM reports WHERE id = ?`),
     count: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE status = 'found'`),
   };
@@ -91,6 +94,10 @@ export function openDatabase(dataDir) {
   return {
     db,
     insert: (row) => stmts.insert.run(row),
+    insertMany: db.transaction((rows) => rows.forEach((r) => stmts.insert.run(r))),
+    recentHashes: (sinceMs) => stmts.recentHashes.all(Date.now() - sinceMs),
+    /** True when another report still references this photo file. */
+    photoInUse: (name) => !!name && stmts.photoRefs.get(name, name).n > 0,
     byId: (id) => stmts.byId.get(id),
     setStatus: (id, status) => stmts.setStatus.run(status, Date.now(), id),
     claim: (id, { note, photo }) => stmts.claim.run({ id, claim_note: note, claim_photo: photo, now: Date.now() }),

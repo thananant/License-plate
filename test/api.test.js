@@ -15,7 +15,7 @@ let tmp;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plates-'));
   proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '', PHOTO_REQUIRED: 'false' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('listening')) resolve(); }));
@@ -127,7 +127,7 @@ test('validation and honeypot', async () => {
   let r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
   assert.equal(r.status, 400);
   const j = await r.json();
-  assert.deepEqual(Object.keys(j.fields).sort(), ['location', 'plate', 'province', 'vehicleType']);
+  assert.deepEqual(Object.keys(j.fields).sort(), ['location', 'plate', 'plates', 'province', 'vehicleType']);
 
   fd = new FormData();
   fd.set('plate', 'กข 1'); fd.set('province', 'ภูเก็ต'); fd.set('vehicleType', 'car'); fd.set('lat', '7.9'); fd.set('lng', '98.3'); fd.set('website', 'spam');
@@ -191,4 +191,53 @@ test('ocr endpoint reports disabled without API key', async () => {
   const r = await fetch(BASE + '/api/ocr', { method: 'POST', body: fd });
   assert.equal(r.status, 503);
   assert.equal((await r.json()).error, 'ocr_disabled');
+});
+
+test('several plates in one photo share one file; the same photo is rejected later', async () => {
+  const jpeg = await sharp({ create: { width: 640, height: 480, channels: 3, background: '#8a8f96' } })
+    .composite([{ input: { create: { width: 300, height: 120, channels: 3, background: '#fff' } }, left: 40, top: 60 }])
+    .jpeg().toBuffer();
+  const fd = new FormData();
+  fd.set('plates', JSON.stringify([
+    { plate: 'กก 1', province: 'ชลบุรี', vehicleType: 'car' },
+    { plate: 'ขข 2', province: 'ระยอง', vehicleType: 'motorcycle' },
+  ]));
+  fd.set('lat', '13.1'); fd.set('lng', '100.9');
+  fd.set('photo', new Blob([jpeg], { type: 'image/jpeg' }), 'p.jpg');
+  let r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
+  assert.equal(r.status, 201);
+  const { reports } = await r.json();
+  assert.equal(reports.length, 2);
+  assert.equal(reports[0].report.photo, reports[1].report.photo);
+  assert.ok(reports[0].token !== reports[1].token);
+
+  // re-encoded copy of the same photo -> duplicate
+  const again = await sharp(jpeg).resize(500).jpeg({ quality: 60 }).toBuffer();
+  const fd2 = new FormData();
+  fd2.set('plate', 'คค 3'); fd2.set('province', 'ตราด'); fd2.set('vehicleType', 'car'); fd2.set('lat', '13.1'); fd2.set('lng', '100.9');
+  fd2.set('photo', new Blob([again], { type: 'image/jpeg' }), 'p2.jpg');
+  r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd2 });
+  assert.equal(r.status, 409);
+  const j = await r.json();
+  assert.equal(j.error, 'duplicate_photo');
+  assert.equal(j.existing.length, 2);
+
+  // deleting one plate keeps the shared photo for the other
+  r = await fetch(BASE + '/api/reports/' + reports[0].report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: reports[0].token }) });
+  assert.equal(r.status, 204);
+  r = await fetch(BASE + '/uploads/' + reports[1].report.photo);
+  assert.equal(r.status, 200);
+  r = await fetch(BASE + '/api/reports/' + reports[1].report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: reports[1].token }) });
+  assert.equal(r.status, 204);
+  r = await fetch(BASE + '/uploads/' + reports[1].report.photo);
+  assert.equal(r.status, 404);
+});
+
+test('duplicate plate inside one submission is rejected', async () => {
+  const fd = new FormData();
+  fd.set('plates', JSON.stringify([{ plate: 'งง 9', province: 'ตาก', vehicleType: 'car' }, { plate: 'ง ง-9', province: 'ตาก', vehicleType: 'car' }]));
+  fd.set('lat', '16.8'); fd.set('lng', '99.1');
+  const r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
+  assert.equal(r.status, 400);
+  assert.equal((await r.json()).fields.plate, 'duplicate');
 });
