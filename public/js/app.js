@@ -4,7 +4,7 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const TYPE_LABEL = { car: 'รถยนต์', motorcycle: 'รถจักรยานยนต์', other: 'อื่น ๆ' };
+  const TYPE_LABEL = { car: 'รถยนต์', motorcycle: 'มอเตอร์ไซค์', other: 'อื่น ๆ' };
   const fmt7 = (n) => Number(n).toFixed(7);
 
   let cfg = null;

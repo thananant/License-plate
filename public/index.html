@@ -8,6 +8,7 @@
   <title>หาป้ายทะเบียน — แผนที่ป้ายทะเบียนที่พบหลังน้ำท่วม</title>
   <meta name="description" content="แผนที่ชุมชนสำหรับแจ้งและค้นหาแผ่นป้ายทะเบียนรถยนต์และรถจักรยานยนต์ที่หลุดหายจากน้ำท่วม ไม่ต้องสมัครสมาชิก ไม่เก็บข้อมูลส่วนตัว">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='16' width='56' height='32' rx='6' fill='%231e3a8a'/%3E%3Crect x='10' y='22' width='44' height='20' rx='3' fill='%23fff'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#d42b2b">
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -47,7 +48,7 @@
               <select name="type" id="s-type">
                 <option value="">ทั้งหมด</option>
                 <option value="car">รถยนต์</option>
-                <option value="motorcycle">รถจักรยานยนต์</option>
+                <option value="motorcycle">มอเตอร์ไซค์</option>
                 <option value="other">อื่น ๆ</option>
               </select>
             </label>
@@ -64,7 +65,7 @@
             <input type="checkbox" id="s-inview"> ค้นหาเฉพาะในพื้นที่ที่แสดงบนแผนที่
           </label>
           <div class="actions">
-            <button type="submit" class="btn primary">ค้นหา</button>
+            <button type="submit" class="btn primary" style="flex:1">ค้นหา</button>
             <button type="button" class="btn" id="s-reset">ล้าง</button>
           </div>
         </form>
@@ -77,68 +78,73 @@
       <!-- ===== REPORT ===== -->
       <section class="tabpane" data-pane="report">
         <form id="report-form" autocomplete="off" enctype="multipart/form-data">
-          <p class="hint">
-            <strong>ขั้นตอน:</strong> 1) กรอกเลขทะเบียน 2) ปักหมุดจุดที่พบให้ตรงที่สุด (คลิกบนแผนที่ ลากหมุดปรับ หรือกด "ใช้ตำแหน่งปัจจุบัน") 3) กดส่ง
-          </p>
-          <label>
-            <span>เลขทะเบียน <em>*</em></span>
-            <input name="plate" id="r-plate" required maxlength="20" placeholder="เช่น 1กข 1234">
-          </label>
-          <label>
-            <span>จังหวัดบนป้าย <em>*</em></span>
-            <select name="province" id="r-province" required>
-              <option value="">— เลือกจังหวัด —</option>
-            </select>
-          </label>
-          <fieldset class="radios">
-            <legend>ประเภทรถ <em>*</em></legend>
-            <label><input type="radio" name="vehicleType" value="car" checked> รถยนต์</label>
-            <label><input type="radio" name="vehicleType" value="motorcycle"> รถจักรยานยนต์</label>
-            <label><input type="radio" name="vehicleType" value="other"> อื่น ๆ</label>
-          </fieldset>
-
-          <div class="locbox">
-            <div class="locbox-head">
-              <strong>ตำแหน่งที่พบ <em>*</em></strong>
-              <span id="r-locstatus" class="muted">ยังไม่ได้ปักหมุด</span>
-            </div>
-            <div class="row">
-              <button type="button" class="btn" id="r-geoloc">📡 ใช้ตำแหน่งปัจจุบัน</button>
-              <button type="button" class="btn" id="r-center">🎯 ปักหมุดกลางจอ</button>
-            </div>
-            <div class="row coords">
-              <label><span>ละติจูด</span><input id="r-lat" name="lat" inputmode="decimal" placeholder="13.7563000"></label>
-              <label><span>ลองจิจูด</span><input id="r-lng" name="lng" inputmode="decimal" placeholder="100.5018000"></label>
-            </div>
-            <input type="hidden" name="accuracy" id="r-accuracy">
-            <p class="muted small">ซูมแผนที่ให้ใกล้ที่สุดแล้วลากหมุดให้ตรงจุดจริง หรือวางพิกัดจาก Google Maps ก็ได้ (เช่น 13.7563, 100.5018)</p>
+          <div class="step">
+            <div class="step-head"><span class="step-num">1</span><strong>ข้อมูลป้าย</strong></div>
             <label>
-              <span>จุดสังเกต (เช่น หน้าร้าน, เสาไฟ, บ้านเลขที่)</span>
+              <span>เลขทะเบียน <em>*</em></span>
+              <input name="plate" id="r-plate" required maxlength="20" placeholder="เช่น 1กข 1234">
+            </label>
+            <label>
+              <span>จังหวัดบนป้าย <em>*</em></span>
+              <select name="province" id="r-province" required>
+                <option value="">— เลือกจังหวัด —</option>
+              </select>
+            </label>
+            <fieldset class="radios">
+              <legend>ประเภทรถ <em>*</em></legend>
+              <div class="seg">
+                <label><input type="radio" name="vehicleType" value="car" checked><span>🚗 รถยนต์</span></label>
+                <label><input type="radio" name="vehicleType" value="motorcycle"><span>🏍️ มอเตอร์ไซค์</span></label>
+                <label><input type="radio" name="vehicleType" value="other"><span>อื่น ๆ</span></label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="step">
+            <div class="step-head"><span class="step-num">2</span><strong>จุดที่พบ <em>*</em></strong></div>
+            <div class="locbox">
+              <div class="locbox-head">
+                <span class="muted">คลิกบนแผนที่ ลากหมุด หรือใช้ GPS</span>
+                <span id="r-locstatus" class="muted">ยังไม่ได้ปักหมุด</span>
+              </div>
+              <div class="row">
+                <button type="button" class="btn" id="r-geoloc">📡 ใช้ตำแหน่งปัจจุบัน</button>
+                <button type="button" class="btn" id="r-center">🎯 ปักหมุดกลางจอ</button>
+              </div>
+              <div class="row coords" style="margin-top:10px">
+                <label><span>ละติจูด</span><input id="r-lat" name="lat" inputmode="decimal" placeholder="13.7563000"></label>
+                <label><span>ลองจิจูด</span><input id="r-lng" name="lng" inputmode="decimal" placeholder="100.5018000"></label>
+              </div>
+              <input type="hidden" name="accuracy" id="r-accuracy">
+              <p class="muted small">ซูมให้ใกล้สุดแล้วลากหมุดให้ตรงจุดจริง หรือวางพิกัดจาก Google Maps (เช่น 13.7563, 100.5018)</p>
+            </div>
+            <label style="margin-top:12px">
+              <span>จุดสังเกต (หน้าร้าน, เสาไฟ, บ้านเลขที่)</span>
               <input name="placeNote" id="r-place" maxlength="200" placeholder="เช่น ฝากไว้ที่ร้านกาแฟหัวมุม ซอย 5">
             </label>
           </div>
 
-          <label>
-            <span>รูปถ่ายป้าย (ไม่บังคับ, สูงสุด 8 MB)</span>
-            <input type="file" name="photo" id="r-photo" accept="image/*">
-          </label>
-          <div id="r-preview" class="preview" hidden></div>
-          <p class="muted small">ระบบจะลบข้อมูล EXIF/GPS ในรูปออกให้อัตโนมัติ และย่อรูปก่อนบันทึก</p>
-
-          <label>
-            <span>ข้อความเพิ่มเติม (ไม่บังคับ)</span>
-            <textarea name="note" id="r-note" maxlength="500" rows="3" placeholder="เช่น ป้ายอยู่ที่ป้อมยาม ติดต่อรับได้ 8:00–17:00"></textarea>
-          </label>
-          <p class="warn small">⚠️ อย่าใส่เบอร์โทร ชื่อ หรือข้อมูลส่วนตัวของคุณ ระบุแค่ "รับได้ที่ไหน" ก็เพียงพอ</p>
+          <div class="step">
+            <div class="step-head"><span class="step-num">3</span><strong>รูปและรายละเอียด</strong> <span class="muted small">(ไม่บังคับ)</span></div>
+            <label>
+              <span>รูปถ่ายป้าย (สูงสุด 8 MB)</span>
+              <input type="file" name="photo" id="r-photo" accept="image/*">
+            </label>
+            <div id="r-preview" class="preview" hidden></div>
+            <p class="muted small">ระบบลบข้อมูล EXIF/GPS ในรูปและย่อขนาดให้อัตโนมัติ</p>
+            <label>
+              <span>ข้อความเพิ่มเติม</span>
+              <textarea name="note" id="r-note" maxlength="500" rows="3" placeholder="เช่น ป้ายอยู่ที่ป้อมยาม ติดต่อรับได้ 8:00–17:00"></textarea>
+            </label>
+            <p class="warn small" style="margin:0">⚠️ อย่าใส่เบอร์โทร ชื่อ หรือข้อมูลส่วนตัวของคุณ ระบุแค่ "รับได้ที่ไหน" ก็เพียงพอ</p>
+          </div>
 
           <div class="honeypot" aria-hidden="true">
             <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
           </div>
 
-          <div class="actions">
-            <button type="submit" class="btn primary" id="r-submit">ส่งรายงาน</button>
-          </div>
-          <p id="r-error" class="error" role="alert" hidden></p>
+          <button type="submit" class="btn primary block" id="r-submit">ส่งรายงาน</button>
+          <p id="r-error" class="error" role="alert" hidden style="margin-top:10px"></p>
         </form>
 
         <div id="r-success" class="success" hidden>

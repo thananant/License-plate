@@ -79,7 +79,7 @@
       if (!this.draft) {
         this.draft = new google.maps.Marker({
           map: this.map, position: p, draggable: true, zIndex: 999,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: '#b42318', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: '#d42b2b', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
         });
         this.draft.addListener('drag', () => { const q = this.draft.getPosition(); onMove({ lat: q.lat(), lng: q.lng() }); });
         this.draft.addListener('dragend', () => { const q = this.draft.getPosition(); onMove({ lat: q.lat(), lng: q.lng() }, true); });
@@ -91,13 +91,13 @@
       if (this.circle) { this.circle.setMap(null); this.circle = null; }
       if (!center || !radius) return;
       this.circle = new google.maps.Circle({
-        map: this.map, center, radius, strokeColor: '#2f4fb8', strokeWeight: 1, fillColor: '#2f4fb8', fillOpacity: .12, clickable: false,
+        map: this.map, center, radius, strokeColor: '#d42b2b', strokeWeight: 1, fillColor: '#d42b2b', fillOpacity: .12, clickable: false,
       });
     }
   }
 
   function pinIcon(r) {
-    const color = r.status === 'returned' ? '#047857' : (r.vehicle_type === 'motorcycle' ? '#d97706' : '#1e3a8a');
+    const color = r.status === 'returned' ? '#1f8f5a' : (r.vehicle_type === 'motorcycle' ? '#e0a800' : '#d42b2b');
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">
       <path d="M15 1C7.3 1 1 7.3 1 15c0 10 14 24 14 24s14-14 14-24C29 7.3 22.7 1 15 1z" fill="${color}" stroke="#fff" stroke-width="2"/>
       <rect x="7" y="11" width="16" height="9" rx="2" fill="#fff"/></svg>`;
@@ -142,7 +142,7 @@
     setMarkers(reports, onSelect) {
       this.layer.clearLayers();
       reports.forEach((r) => {
-        const color = r.status === 'returned' ? '#047857' : (r.vehicle_type === 'motorcycle' ? '#d97706' : '#1e3a8a');
+        const color = r.status === 'returned' ? '#1f8f5a' : (r.vehicle_type === 'motorcycle' ? '#e0a800' : '#d42b2b');
         const icon = L.divIcon({
           className: '', iconSize: [30, 40], iconAnchor: [15, 39],
           html: `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40"><path d="M15 1C7.3 1 1 7.3 1 15c0 10 14 24 14 24s14-14 14-24C29 7.3 22.7 1 15 1z" fill="${color}" stroke="#fff" stroke-width="2"/><rect x="7" y="11" width="16" height="9" rx="2" fill="#fff"/></svg>`,
@@ -153,7 +153,7 @@
     setDraft(p, onMove) {
       if (!p) { if (this.draft) this.map.removeLayer(this.draft); this.draft = null; return; }
       if (!this.draft) {
-        const icon = L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: '<div style="width:22px;height:22px;border-radius:50%;background:#b42318;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)"></div>' });
+        const icon = L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: '<div style="width:22px;height:22px;border-radius:50%;background:#d42b2b;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)"></div>' });
         this.draft = L.marker([p.lat, p.lng], { icon, draggable: true, zIndexOffset: 1000, autoPan: true }).addTo(this.map);
         this.draft.on('drag', () => { const q = this.draft.getLatLng(); onMove({ lat: q.lat, lng: q.lng }); });
         this.draft.on('dragend', () => { const q = this.draft.getLatLng(); onMove({ lat: q.lat, lng: q.lng }, true); });
@@ -164,7 +164,7 @@
     setAccuracyCircle(center, radius) {
       if (this.circle) { this.map.removeLayer(this.circle); this.circle = null; }
       if (!center || !radius) return;
-      this.circle = L.circle([center.lat, center.lng], { radius, color: '#2f4fb8', weight: 1, fillOpacity: .12, interactive: false }).addTo(this.map);
+      this.circle = L.circle([center.lat, center.lng], { radius, color: '#d42b2b', weight: 1, fillOpacity: .12, interactive: false }).addTo(this.map);
     }
   }
 
