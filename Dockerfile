@@ -17,7 +17,7 @@ COPY public ./public
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 EXPOSE 3000
-VOLUME ["/data"]
-HEALTHCHECK --interval=30s --timeout=5s \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/config').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# No VOLUME / HEALTHCHECK here: Railway rejects both at validation time and
+# provides them via its own volume UI and railway.json healthcheckPath.
+# Docker Compose mounts /data via docker-compose.yml.
 CMD ["node", "src/server.js"]
