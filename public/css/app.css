@@ -183,7 +183,7 @@ select {
 .empty { color: var(--ink-2); text-align: center; padding: 26px 12px; background: var(--cream); border-radius: var(--radius); border: 1.5px dashed #ecd9a8; }
 
 /* ============ Map ============ */
-.mapwrap { position: relative; min-height: 0; }
+.mapwrap { position: relative; min-height: 0; isolation: isolate; z-index: 1; }
 #map { position: absolute; inset: 0; background: #f3ead8; }
 .map-tools { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 3; }
 .map-tools .btn { box-shadow: var(--shadow); border-color: transparent; }
@@ -344,7 +344,7 @@ body.cam-open { overflow: hidden; }
 /* ============ mobile: collapsible map ============ */
 .sheet-bar { display: none; }
 @media (max-width: 800px) {
-  .sheet-bar { display: flex; justify-content: center; padding: 8px 12px 0; position: sticky; top: 0; z-index: 3; background: var(--white); }
+  .sheet-bar { display: flex; justify-content: center; padding: 10px 12px 2px; position: sticky; top: 0; z-index: 3; background: var(--white); border-radius: 20px 20px 0 0; }
   .sheet-bar .btn { min-height: 34px; box-shadow: var(--shadow-sm); }
   body.map-collapsed .layout { grid-template-rows: 1fr; }
   body.map-collapsed .mapwrap { display: none; }
