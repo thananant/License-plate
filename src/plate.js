@@ -30,9 +30,15 @@ export function cleanPlateDisplay(input) {
   return s;
 }
 
+// Thai plate formats as issued by the DLT:
+//   กข 1234   -> 1-2 Thai letters + 1-4 digits
+//   1กข 1234  -> 1 leading digit + 2 Thai letters + 1-4 digits
+// Never three letters, never more than four digits. Special/diplomatic plates
+// with Latin letters are accepted loosely (1-3 letters + 1-4 digits).
+export const THAI_PLATE_RE = /^(\d)?([ก-ฮ]{1,2})(\d{1,4})$/;
+const LATIN_PLATE_RE = /^[A-Z]{1,3}\d{1,4}$/;
+
 export function isPlausiblePlate(normalized) {
-  // Thai plates: 1-3 Thai letters (optionally preceded by a digit) + 1-4 digits.
-  // Also accept diplomatic / other formats loosely: 2-12 chars, must contain a digit.
-  if (normalized.length < 2 || normalized.length > 12) return false;
-  return /[0-9]/.test(normalized);
+  if (typeof normalized !== 'string') return false;
+  return THAI_PLATE_RE.test(normalized) || LATIN_PLATE_RE.test(normalized);
 }

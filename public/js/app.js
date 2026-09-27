@@ -117,7 +117,27 @@
     if (!reports.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = 'ยังไม่มีรายงานที่ตรงกับเงื่อนไข ลองค้นหาแค่ตัวเลข หรือเลือก "ทุกจังหวัด"';
+      const searched = !!($('#s-plate').value.trim() || $('#s-province').value || $('#s-type').value || $('#s-inview').checked);
+      if (searched) {
+        const h = document.createElement('div'); h.className = 'empty-title'; h.textContent = 'ไม่พบข้อมูล แต่ไม่เป็นไรน้า 💛';
+        const p1 = document.createElement('p'); p1.textContent = 'มีคนเก็บป้ายและแจ้งเข้ามาเรื่อยๆ ลองเข้ามาดูใหม่เป็นระยะ เป็นกำลังใจให้นะครับ';
+        const tips = document.createElement('ul'); tips.className = 'tips';
+        [
+          'ลองพิมพ์แค่ตัวเลข เช่น "1234" เพราะบางป้ายอ่านตัวอักษรผิด หรือเลือก "ทุกจังหวัด"',
+          'ค่อยๆ ตามหาตามเส้นทางที่ขับผ่านตอนน้ำท่วม: ซูมแผนที่ไปตามถนน แล้วกดดูรูปของรายการใกล้ๆ บางรูปมีป้ายหลายแผ่น อาจเจอป้ายของคุณอยู่ในรูป',
+          'ถามจุดรับของหาย ป้อมยาม หรือ อบต. ในพื้นที่ แล้วชวนคนที่เก็บป้ายมาแจ้งในแผนที่นี้',
+        ].forEach((t) => { const x = document.createElement('li'); x.textContent = t; tips.appendChild(x); });
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn small'; btn.textContent = '🗺️ ดูทุกรายการตามเส้นทางบนแผนที่';
+        btn.addEventListener('click', () => {
+          $('#s-plate').value = ''; $('#s-type').value = ''; $('#s-status').value = 'all';
+          $('#s-inview').checked = true;
+          showMapIfNeeded();
+          runSearch();
+        });
+        li.append(h, p1, tips, btn);
+      } else {
+        li.textContent = 'ยังไม่มีรายงานในระบบ ถ้าคุณเจอป้ายที่หลุดหาย กดแท็บ "แจ้งพบป้าย" ได้เลย';
+      }
       ul.appendChild(li);
       return;
     }
@@ -455,6 +475,11 @@
     // Radio groups must have unique names per row.
     rows.forEach((r, i) => r.querySelectorAll('.seg input').forEach((inp) => (inp.name = 'vt' + i)));
   }
+  // Mirrors the server rule: optional leading digit, 1-2 Thai letters, 1-4 digits (or Latin 1-3 letters + 1-4 digits).
+  function plateLooksValid(display) {
+    const n = display.normalize('NFC').replace(/[๐-๙]/g, (d) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(d))).toUpperCase().replace(/[^\u0E00-\u0E7FA-Z0-9]/g, '');
+    return /^\d?[ก-ฮ]{1,2}\d{1,4}$/.test(n) || /^[A-Z]{1,3}\d{1,4}$/.test(n);
+  }
   function readPlateRows() {
     return $$('.plate-row').map((r) => ({
       plate: r.querySelector('.p-plate').value.trim(),
@@ -483,6 +508,8 @@
     const bad = rows.find((r) => !r.plate || !r.province);
     if (bad) { showError('กรุณากรอกเลขทะเบียนและจังหวัดให้ครบทุกแผ่น'); bad.el.querySelector(!bad.plate ? '.p-plate' : '.p-province').focus(); return; }
     if (rows.some((r) => r.plate.includes('?'))) { showError('มีเลขทะเบียนที่ยังมีเครื่องหมาย ? กรุณาแก้เป็นตัวอักษรที่ถูกต้อง'); return; }
+    const badFormat = rows.find((r) => !plateLooksValid(r.plate));
+    if (badFormat) { showError(`เลขทะเบียน "${badFormat.plate}" ไม่ตรงรูปแบบ ป้ายไทยเป็น กข 1234 หรือ 1กข 1234 (ตัวอักษรไม่เกิน 2 ตัว ตัวเลขไม่เกิน 4 หลัก)`); badFormat.el.querySelector('.p-plate').focus(); return; }
 
     if (cfg.photoRequired && !capturedPhoto) { showError('กรุณาถ่ายรูปป้ายก่อน (ขั้นที่ 1) รับเฉพาะรูปที่ถ่ายจากกล้องในแอป'); $('#r-shoot').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
@@ -527,7 +554,7 @@
         const f = err.body.fields;
         if (f.photo) msg = 'กรุณาถ่ายรูปป้ายก่อนส่ง';
         else if (f.plate === 'duplicate') msg = 'มีเลขทะเบียนซ้ำกันในรายการ กรุณาลบแผ่นที่ซ้ำ';
-        else if (f.plate) msg = 'เลขทะเบียนไม่ถูกต้อง (ต้องมีตัวเลขอย่างน้อย 1 ตัว และไม่มี ?)';
+        else if (f.plate) msg = 'เลขทะเบียนไม่ตรงรูปแบบ ป้ายไทยเป็น กข 1234 หรือ 1กข 1234 (ตัวอักษรไม่เกิน 2 ตัว ตัวเลขไม่เกิน 4 หลัก)';
         else if (f.province) msg = 'กรุณาเลือกจังหวัดให้ครบทุกแผ่น';
         else if (f.location) msg = 'พิกัดไม่ถูกต้อง กรุณาปักหมุดใหม่';
       }

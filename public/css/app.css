@@ -165,11 +165,11 @@ select {
 /* ============ Results ============ */
 .results-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-2); margin: 8px 0; font-weight: 600; }
 .results { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.results li {
+.results > li {
   border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer;
   display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; background: var(--white); transition: all .15s;
 }
-.results li:hover, .results li:focus-visible { border-color: var(--red); box-shadow: var(--shadow); transform: translateY(-1px); outline: none; }
+.results > li:not(.empty):hover, .results > li:not(.empty):focus-visible { border-color: var(--red); box-shadow: var(--shadow); transform: translateY(-1px); outline: none; }
 .results .plate {
   font-size: 20px; font-weight: 800; letter-spacing: .03em; color: var(--ink);
   display: inline-block; background: var(--cream-2); padding: 2px 10px; border-radius: 8px; border: 1.5px solid #ecd9a8; width: fit-content;
@@ -180,7 +180,11 @@ select {
 .badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--red-soft); color: var(--red-dark); margin-right: 6px; }
 .badge.returned { background: var(--ok-soft); color: var(--ok); }
 .badge.moto { background: var(--yellow-soft); color: #7a5a00; }
-.empty { color: var(--ink-2); text-align: center; padding: 26px 12px; background: var(--cream); border-radius: var(--radius); border: 1.5px dashed #ecd9a8; }
+.results > li.empty, .empty { display: block; cursor: default; color: var(--ink-2); text-align: center; padding: 22px 14px; background: var(--cream); border-radius: var(--radius); border: 1.5px dashed #ecd9a8; }
+.empty-title { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+.empty p { margin: 0 0 10px; font-size: 14px; }
+.empty .tips { text-align: left; margin: 0 0 12px; padding-left: 20px; font-size: 13px; }
+.empty .tips li { margin-bottom: 6px; display: list-item; border: 0; padding: 0; background: none; text-align: left; }
 
 /* ============ Map ============ */
 .mapwrap { position: relative; min-height: 0; isolation: isolate; z-index: 1; }
