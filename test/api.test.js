@@ -15,7 +15,7 @@ let tmp;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plates-'));
   proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('listening')) resolve(); }));
@@ -141,4 +141,17 @@ test('validation and honeypot', async () => {
   r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
   assert.equal(r.status, 400);
   assert.equal((await r.json()).error, 'unsupported_image');
+});
+
+test('admin token can moderate any report', async () => {
+  const fd = new FormData();
+  fd.set('plate', 'ขค 999'); fd.set('province', 'ระยอง'); fd.set('vehicleType', 'car'); fd.set('lat', '12.68'); fd.set('lng', '101.28');
+  let r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
+  assert.equal(r.status, 201);
+  const { report } = await r.json();
+
+  r = await fetch(BASE + '/api/reports/' + report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'wrong-admin-token-with-enough-length-1' }) });
+  assert.equal(r.status, 403);
+  r = await fetch(BASE + '/api/reports/' + report.id, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123' }) });
+  assert.equal(r.status, 204);
 });

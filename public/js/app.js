@@ -172,7 +172,7 @@
       if (pan) map.panTo(draft, Math.max(map.getZoom(), 18));
     }
   }
-  function onDraftMove(p) { setDraft(p, { accuracy: null }); }
+  function onDraftMove(p) { if (gpsWatchId != null) stopGps(); setDraft(p, { accuracy: null }); }
 
   ['#r-lat', '#r-lng'].forEach((sel) => $(sel).addEventListener('change', onCoordInput));
   $('#r-lat').addEventListener('paste', (e) => {
@@ -190,22 +190,62 @@
   $('#r-geoloc').addEventListener('click', () => locate(true));
   $('#map-me').addEventListener('click', () => locate(false));
 
+  // Continuous GPS: watch for up to GPS_WATCH_MS, keep the most accurate fix,
+  // stop early once accuracy is good enough. Single reads are often 30-100 m off
+  // for the first few seconds while the phone is still acquiring satellites.
+  const GPS_WATCH_MS = 20000;
+  const GPS_GOOD_ENOUGH_M = 5;
+  let gpsWatchId = null;
+  let gpsTimer = null;
+
+  function stopGps(label) {
+    if (gpsWatchId != null) navigator.geolocation.clearWatch(gpsWatchId);
+    if (gpsTimer) clearTimeout(gpsTimer);
+    gpsWatchId = null; gpsTimer = null;
+    const btn = $('#r-geoloc'); btn.disabled = false; btn.textContent = label || '📡 ใช้ตำแหน่งปัจจุบัน';
+  }
+
   function locate(asDraft) {
     if (!navigator.geolocation) return alert('เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง');
-    const btn = $('#r-geoloc'); btn.disabled = true; btn.textContent = '⏳ กำลังหาตำแหน่ง…';
-    navigator.geolocation.getCurrentPosition(
+    if (!asDraft) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { if (map) map.panTo({ lat: pos.coords.latitude, lng: pos.coords.longitude }, 17); },
+        () => alert('หาตำแหน่งไม่สำเร็จ'),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
+      return;
+    }
+    if (gpsWatchId != null) { stopGps(); return; } // second press = stop early
+    const btn = $('#r-geoloc'); btn.disabled = false; btn.textContent = '⏳ กำลังหาตำแหน่ง… (กดอีกครั้งเพื่อหยุด)';
+    let best = null;
+    const started = Date.now();
+    gpsWatchId = navigator.geolocation.watchPosition(
       (pos) => {
-        btn.disabled = false; btn.textContent = '📡 ใช้ตำแหน่งปัจจุบัน';
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (asDraft) setDraft(p, { accuracy: pos.coords.accuracy, pan: true });
-        else if (map) map.panTo(p, 17);
+        const c = pos.coords;
+        if (!best || c.accuracy < best.accuracy) {
+          best = { lat: c.latitude, lng: c.longitude, accuracy: c.accuracy };
+          setDraft(best, { accuracy: best.accuracy, pan: true });
+        }
+        const secs = Math.round((Date.now() - started) / 1000);
+        $('#r-locstatus').textContent = `GPS ±${Math.round(best.accuracy)} ม. (กำลังปรับ ${secs}s)`;
+        if (best.accuracy <= GPS_GOOD_ENOUGH_M) finish();
       },
       (err) => {
-        btn.disabled = false; btn.textContent = '📡 ใช้ตำแหน่งปัจจุบัน';
-        alert(err.code === 1 ? 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง กรุณาคลิกบนแผนที่แทน' : 'หาตำแหน่งไม่สำเร็จ กรุณาคลิกบนแผนที่แทน');
+        stopGps();
+        if (!best) alert(err.code === 1 ? 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง กรุณาคลิกบนแผนที่แทน' : 'หาตำแหน่งไม่สำเร็จ กรุณาคลิกบนแผนที่แทน');
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: GPS_WATCH_MS, maximumAge: 0 },
     );
+    gpsTimer = setTimeout(finish, GPS_WATCH_MS);
+    function finish() {
+      stopGps();
+      if (best) {
+        setDraft(best, { accuracy: best.accuracy });
+        $('#r-locstatus').textContent = `ปักหมุดแล้ว (GPS ±${Math.round(best.accuracy)} ม.) ลากหมุดปรับให้ตรงจุดได้`;
+      } else {
+        alert('ยังหาตำแหน่งไม่ได้ ลองออกไปกลางแจ้งหรือคลิกบนแผนที่แทน');
+      }
+    }
   }
 
   // ---------- report: photo preview ----------

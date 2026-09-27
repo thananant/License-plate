@@ -15,6 +15,8 @@ No accounts, no cookies, no tracking, no IP logging.
   ระบบจับคู่ "กข 1234", "กข-1234", "กข1234" และเลขไทย "๑๒๓๔" ให้อัตโนมัติ
 - **นำทาง**: เปิดพิกัดใน Google Maps / OpenStreetMap ได้ทันที
 - **จัดการรายงาน**: ผู้แจ้งได้รับรหัสลับ 1 ชุดสำหรับทำเครื่องหมาย "คืนเจ้าของแล้ว" หรือลบรายงาน ไม่ต้องมีบัญชี
+- **GPS ต่อเนื่อง**: กดปุ่มเดียว ระบบฟังตำแหน่งนานสุด 20 วินาที เก็บค่าที่แม่นที่สุด หยุดเองเมื่อคลาดเคลื่อน ≤ 5 ม.
+- **ผู้ดูแล**: ตั้ง `ADMIN_TOKEN` เพื่อลบรายงานสแปมได้โดยไม่ต้องมีระบบล็อกอิน
 - **แผนที่**: ใช้ Google Maps ถ้ามี API key หรือ OpenStreetMap (Leaflet) ถ้าไม่มี key
 
 ## ความปลอดภัยและความเป็นส่วนตัว
@@ -56,6 +58,13 @@ cp .env.example .env   # แก้ไขค่าตามต้องการ 
 npm start              # http://localhost:3000
 ```
 
+### Railway (แนะนำสำหรับมือใหม่)
+
+1. New Project → Deploy from GitHub repo → เลือก repo นี้ (มี `railway.json` และ `Dockerfile` ให้แล้ว)
+2. Variables: `DATA_DIR=/data`, `TRUST_PROXY=true`, `ADMIN_TOKEN=<รหัสยาว ๆ>`
+3. Settings → Volumes → Add Volume, Mount Path `/data`
+4. Settings → Networking → Generate Domain
+
 ### Docker
 
 ```bash
@@ -74,6 +83,7 @@ docker compose up -d --build
 | `GOOGLE_MAPS_API_KEY` | ว่าง | ถ้าใส่จะใช้ Google Maps, ถ้าว่างใช้ OpenStreetMap |
 | `MAP_CENTER_LAT` / `MAP_CENTER_LNG` / `MAP_ZOOM` | กรุงเทพฯ / 6 | จุดเริ่มต้นของแผนที่ |
 | `TRUST_PROXY` | `false` | ตั้ง `true` เมื่ออยู่หลัง nginx/Cloudflare เพื่อให้ rate limit เห็น IP จริง |
+| `ADMIN_TOKEN` | ว่าง | รหัสผู้ดูแล (≥24 ตัวอักษร) ใส่แทนรหัสจัดการในหน้า "จัดการรายงาน" เพื่อลบ/แก้สถานะรายงานใดก็ได้ ใช้ลบสแปม |
 
 ### ตัวอย่าง reverse proxy (Caddy)
 

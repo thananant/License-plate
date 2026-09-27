@@ -13,6 +13,7 @@ import { PROVINCES, PROVINCE_SET, VEHICLE_TYPES } from './provinces.js';
 import { normalizePlate, cleanPlateDisplay, isPlausiblePlate } from './plate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const ROOT = path.resolve(__dirname, '..');
 
 // ---------- config ----------
@@ -26,6 +27,10 @@ const MAP_CENTER = {
   zoom: Number(process.env.MAP_ZOOM || 6),
 };
 const TRUST_PROXY = String(process.env.TRUST_PROXY || 'false') === 'true';
+// Optional moderator secret. When set, it is accepted in place of a report's own
+// token so spam/abusive reports can be removed. Never stored, never sent to clients.
+const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
+const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const MAX_PHOTO_EDGE = 1600;
@@ -91,7 +96,6 @@ const writeLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 20, standardHeade
 app.use(express.json({ limit: '32kb' }));
 
 // ---------- helpers ----------
-const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const newId = () => crypto.randomBytes(9).toString('base64url'); // 12 chars, URL safe
 const newToken = () => crypto.randomBytes(24).toString('base64url'); // 32 chars
 
@@ -108,11 +112,17 @@ function parseCoord(v, min, max) {
   return Math.round(n * 1e7) / 1e7; // ~1 cm precision
 }
 
+function hashEquals(hexA, hexB) {
+  const a = Buffer.from(hexA, 'hex');
+  const b = Buffer.from(hexB, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function checkToken(row, token) {
   if (!row || typeof token !== 'string' || token.length < 16 || token.length > 128) return false;
-  const a = Buffer.from(row.token_hash, 'hex');
-  const b = Buffer.from(sha256(token), 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const h = sha256(token);
+  if (hashEquals(row.token_hash, h)) return true;
+  return ADMIN_TOKEN_HASH != null && hashEquals(ADMIN_TOKEN_HASH, h);
 }
 
 const upload = multer({
@@ -294,7 +304,8 @@ app.use((err, _req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'})`);
+  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'}, admin: ${ADMIN_TOKEN_HASH ? 'on' : 'off'})`);
+  if (ADMIN_TOKEN && !ADMIN_TOKEN_HASH) console.warn('ADMIN_TOKEN ignored: must be at least 24 characters');
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
