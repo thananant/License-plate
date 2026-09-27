@@ -253,6 +253,24 @@
             <li><a href="https://www.thairath.co.th/news/auto/news/2962281" target="_blank" rel="noopener noreferrer">ขนส่งฯ แนะวิธีทำป้ายทะเบียนใหม่หลังน้ำท่วม (ไทยรัฐ)</a></li>
           </ul>
           <p class="muted small">ข้อมูลอาจเปลี่ยนแปลงได้ โปรดตรวจสอบกับสำนักงานขนส่งในพื้นที่ก่อนเดินทาง</p>
+
+          <div class="feedback" id="feedback">
+            <h4 style="margin-top:0">💬 ข้อเสนอแนะ / ให้กำลังใจ</h4>
+            <p class="small muted">อยากให้ปรับปรุงอะไร ใช้แล้วติดตรงไหน หรือจะส่งกำลังใจให้ทีมงานก็ได้ 😊 ไม่ต้องใส่ชื่อหรือช่องทางติดต่อ</p>
+            <form id="feedback-form" autocomplete="off">
+              <div class="seg seg-small" style="margin-bottom:10px">
+                <label><input type="radio" name="kind" value="suggestion" checked><span>💡 ข้อเสนอแนะ</span></label>
+                <label><input type="radio" name="kind" value="praise"><span>💖 ให้กำลังใจ</span></label>
+                <label><input type="radio" name="kind" value="problem"><span>🐞 แจ้งปัญหา</span></label>
+              </div>
+              <label><span class="sr-only">ข้อความ</span><textarea name="message" id="fb-message" rows="4" maxlength="1000" required placeholder="พิมพ์ข้อความที่นี่…"></textarea></label>
+              <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+              <div class="actions" style="margin:0">
+                <button type="submit" class="btn primary" id="fb-submit">ส่งข้อความ</button>
+              </div>
+              <p id="fb-msg" class="msg" role="status"></p>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -271,6 +289,8 @@
 
         <div id="admin-tools" hidden>
           <p class="small">โหมดผู้ดูแลเปิดอยู่: ในแท็บ "ค้นหาป้าย" ทุกรายการจะมีปุ่ม 🗑️ ลบ และปุ่มคืนสถานะ (รหัสไม่ถูกบันทึกไว้ในเครื่อง ปิดหน้าแล้วต้องใส่ใหม่)</p>
+          <h4 style="margin:14px 0 6px">📨 ข้อเสนอแนะจากผู้ใช้ <span class="muted small" id="fb-count"></span></h4>
+          <div id="fb-list" class="fb-list"></div>
           <div class="danger-zone">
             <strong>ล้างข้อมูลทั้งหมด</strong>
             <p class="small muted">ลบทุกรายงานและทุกรูปถาวร ใช้ก่อนเปิดใช้งานจริงเพื่อล้างข้อมูลทดลอง</p>
@@ -296,7 +316,7 @@
       <footer class="panel-foot">
         <p><strong>ข้อมูลในระบบใช้เพื่อคืนแผ่นป้ายทะเบียนให้เจ้าของเท่านั้น</strong> ห้ามนำไปใช้เพื่อวัตถุประสงค์อื่น</p>
         <p>ไม่มีสมัครสมาชิก ไม่มีคุกกี้ ไม่มีระบบติดตาม ไม่บันทึกหมายเลข IP รูปถูกลบข้อมูลตำแหน่ง (GPS) ก่อนบันทึก</p>
-        <p>ข้อมูลทั้งหมดเป็นสาธารณะ โปรดอย่าใส่ชื่อ เบอร์โทร หรือข้อมูลส่วนตัว · <a href="#admin" id="admin-link">ผู้ดูแล</a></p>
+        <p>ข้อมูลทั้งหมดเป็นสาธารณะ โปรดอย่าใส่ชื่อ เบอร์โทร หรือข้อมูลส่วนตัว · <a href="#feedback" id="feedback-link">💬 ส่งข้อเสนอแนะ</a></p>
       </footer>
     </aside>
 

@@ -351,3 +351,11 @@ body.cam-open { overflow: hidden; }
   body.map-collapsed .panel { margin-top: 0; border-radius: 0; box-shadow: none; }
   body.map-collapsed .crosshair { display: none; }
 }
+
+/* ============ feedback ============ */
+.feedback { margin-top: 22px; padding: 14px; border-radius: var(--radius); background: var(--cream); border: 1.5px solid #ecd9a8; }
+.fb-list { display: grid; gap: 8px; }
+.fb-item { background: var(--white); border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; }
+.fb-item .fb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: var(--ink-2); }
+.fb-item .fb-head .btn { margin-left: auto; }
+.fb-item p { margin: 0; white-space: pre-wrap; word-break: break-word; }

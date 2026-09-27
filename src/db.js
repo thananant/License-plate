@@ -32,6 +32,16 @@ export function openDatabase(dataDir) {
     CREATE INDEX IF NOT EXISTS idx_reports_geo ON reports(lat, lng);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id         TEXT PRIMARY KEY,
+      kind       TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+  `);
+
   // Lightweight migrations for databases created before these columns existed.
   const cols = new Set(db.prepare('PRAGMA table_info(reports)').all().map((c) => c.name));
   for (const [name, type] of [['claim_note', 'TEXT'], ['claim_photo', 'TEXT'], ['claimed_at', 'INTEGER'], ['photo_hash', 'TEXT'], ['update_kind', 'TEXT']]) {
@@ -59,6 +69,10 @@ export function openDatabase(dataDir) {
     recentHashes: db.prepare(`SELECT id, photo_hash, plate_display, province FROM reports WHERE photo_hash IS NOT NULL AND created_at > ?`),
     photoRefs: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE photo = ? OR claim_photo = ?`),
     allFiles: db.prepare(`SELECT photo, claim_photo FROM reports`),
+    feedbackInsert: db.prepare(`INSERT INTO feedback (id, kind, message, created_at) VALUES (?, ?, ?, ?)`),
+    feedbackList: db.prepare(`SELECT id, kind, message, created_at FROM feedback ORDER BY created_at DESC LIMIT ?`),
+    feedbackDelete: db.prepare(`DELETE FROM feedback WHERE id = ?`),
+    feedbackCount: db.prepare(`SELECT COUNT(*) AS n FROM feedback`),
     deleteAll: db.prepare(`DELETE FROM reports`),
     delete: db.prepare(`DELETE FROM reports WHERE id = ?`),
     count: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE status = 'found'`),
@@ -123,6 +137,10 @@ export function openDatabase(dataDir) {
       return rows;
     },
     activeByPlate: (plateNorm, province) => stmts.activeByPlate.all(plateNorm, province),
+    feedbackAdd: (row) => stmts.feedbackInsert.run(row.id, row.kind, row.message, row.created_at),
+    feedbackList: (limit = 200) => stmts.feedbackList.all(limit),
+    feedbackDelete: (id) => stmts.feedbackDelete.run(id),
+    feedbackCount: () => stmts.feedbackCount.get().n,
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
     stats: () => {

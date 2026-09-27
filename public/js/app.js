@@ -50,10 +50,14 @@
     if (name === 'report' && map && draft) map.setAccuracyCircle(draft, draftAccuracy);
   }
   $$('.tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-  // The admin/manage pane has no tab: open it with #admin (footer link).
-  function checkAdminHash() { if (location.hash === '#admin') setTab('manage'); }
-  window.addEventListener('hashchange', checkAdminHash);
-  $('#admin-link').addEventListener('click', (e) => { e.preventDefault(); location.hash = 'admin'; checkAdminHash(); });
+  // The moderator pane has no tab; the server marks the page when it is served
+  // from the secret ADMIN_PATH, and only then is the pane opened.
+  const isAdminPage = document.documentElement.dataset.admin === '1';
+  const feedbackLink = $('#feedback-link');
+  if (feedbackLink) feedbackLink.addEventListener('click', (e) => {
+    e.preventDefault(); setTab('help');
+    const box = $('#feedback'); if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   // ---------- api ----------
   async function api(path, opts = {}) {
@@ -621,6 +625,46 @@
   }
   function el2(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
+  // ---------- feedback ----------
+  const feedbackForm = $('#feedback-form');
+  if (feedbackForm) feedbackForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('#fb-msg'); const btn = $('#fb-submit');
+    const text = $('#fb-message').value.trim();
+    if (text.length < 3) { msg.className = 'msg err'; msg.textContent = 'พิมพ์ข้อความสักหน่อยนะครับ'; return; }
+    btn.disabled = true; msg.className = 'msg'; msg.textContent = '';
+    try {
+      await api('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: feedbackForm.elements.kind.value, message: text, website: feedbackForm.elements.website.value }) });
+      feedbackForm.reset();
+      msg.className = 'msg ok'; msg.textContent = 'ส่งแล้ว ขอบคุณมากครับ 🙏';
+    } catch (err) {
+      msg.className = 'msg err'; msg.textContent = err.status === 429 ? 'ส่งบ่อยเกินไป กรุณารอสักครู่' : 'ส่งไม่สำเร็จ กรุณาลองใหม่';
+    } finally { btn.disabled = false; }
+  });
+
+  const KIND_LABEL = { suggestion: '💡 ข้อเสนอแนะ', praise: '💖 ให้กำลังใจ', problem: '🐞 แจ้งปัญหา' };
+  async function loadFeedback() {
+    const list = $('#fb-list'); if (!list || !adminToken) return;
+    list.innerHTML = '';
+    try {
+      const out = await api('/api/admin/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: adminToken }) });
+      $('#fb-count').textContent = out.count ? `(${out.count})` : '(ยังไม่มี)';
+      out.items.forEach((f) => {
+        const d = el2('div', 'fb-item');
+        const head = el2('div', 'fb-head');
+        head.append(el2('span', '', KIND_LABEL[f.kind] || f.kind), el2('span', '', new Date(f.created_at).toLocaleString('th-TH')));
+        const del = el2('button', 'btn small ghost', '🗑️'); del.type = 'button'; del.title = 'ลบข้อความ';
+        del.addEventListener('click', async () => {
+          if (!confirm('ลบข้อความนี้?')) return;
+          try { await api('/api/admin/feedback/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: adminToken, id: f.id }) }); loadFeedback(); } catch { alert('ลบไม่สำเร็จ'); }
+        });
+        head.appendChild(del);
+        d.append(head, el2('p', '', f.message));
+        list.appendChild(d);
+      });
+    } catch { $('#fb-count').textContent = '(โหลดไม่สำเร็จ)'; }
+  }
+
   // ---------- admin mode (token kept in memory only) ----------
   let adminToken = null;
   function setAdmin(token) {
@@ -633,6 +677,7 @@
     if (token && !badge) { badge = document.createElement('div'); badge.id = 'admin-badge'; badge.className = 'admin-badge'; badge.textContent = '🔓 โหมดผู้ดูแล'; document.body.appendChild(badge); }
     if (!token && badge) badge.remove();
     runSearch();
+    if (token) loadFeedback();
   }
   $('#admin-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -640,8 +685,7 @@
     try {
       const out = await api('/api/admin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       setAdmin(token);
-      msg.className = 'msg ok'; msg.textContent = `เข้าสู่โหมดผู้ดูแลแล้ว (มี ${out.total} รายการในระบบ)`;
-      setTab('search');
+      msg.className = 'msg ok'; msg.textContent = `เข้าสู่โหมดผู้ดูแลแล้ว (รายงาน ${out.total} รายการ · ข้อเสนอแนะ ${out.feedback || 0} ข้อความ) ไปที่แท็บค้นหาเพื่อลบรายการ`;
     } catch (err) {
       msg.className = 'msg err'; msg.textContent = err.status === 403 ? 'รหัสผู้ดูแลไม่ถูกต้อง' : err.status === 429 ? 'ลองบ่อยเกินไป กรุณารอสักครู่' : 'เชื่อมต่อไม่สำเร็จ';
     }
@@ -726,7 +770,7 @@
       $('#map-fallback').hidden = false;
     }
     await runSearch({ fit: true });
-    checkAdminHash();
+    if (isAdminPage) setTab('manage');
   }
   init();
 })();

@@ -33,6 +33,10 @@ const TRUST_PROXY = String(process.env.TRUST_PROXY || 'false') === 'true';
 // token so spam/abusive reports can be removed. Never stored, never sent to clients.
 const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 const ADMIN_TOKEN_HASH = ADMIN_TOKEN.length >= 24 ? sha256(ADMIN_TOKEN) : null;
+// Secret path that opens the moderator pane, e.g. ADMIN_PATH=panel-x7k2m9 -> https://site/panel-x7k2m9
+// The pane itself is still protected by ADMIN_TOKEN; the path only keeps it out of sight.
+const ADMIN_PATH = (process.env.ADMIN_PATH || 'admin').trim().replace(/^\/+|\/+$/g, '');
+const MAX_FEEDBACK = 1000;
 
 // Automatic deletion is OFF by default (0): a false "returned" click must not
 // make a plate disappear. Moderators delete spam by hand.
@@ -430,10 +434,32 @@ app.delete('/api/reports/:id', writeLimiter, async (req, res) => {
   res.status(204).end();
 });
 
+// ---------- feedback (suggestions / encouragement) ----------
+app.post('/api/feedback', writeLimiter, (req, res) => {
+  const b = req.body || {};
+  if (b.website) return res.status(400).json({ error: 'rejected' });
+  const kind = ['suggestion', 'praise', 'problem'].includes(String(b.kind)) ? String(b.kind) : 'suggestion';
+  const message = cleanText(b.message, MAX_FEEDBACK);
+  if (!message || message.length < 3) return res.status(400).json({ error: 'validation', fields: { message: 'required' } });
+  store.feedbackAdd({ id: newId(), kind, message, created_at: Date.now() });
+  res.status(201).json({ ok: true });
+});
+
+app.post('/api/admin/feedback', writeLimiter, (req, res) => {
+  if (!isAdminToken(req.body?.token)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ count: store.feedbackCount(), items: store.feedbackList(200) });
+});
+
+app.post('/api/admin/feedback/delete', writeLimiter, (req, res) => {
+  if (!isAdminToken(req.body?.token)) return res.status(403).json({ error: 'forbidden' });
+  store.feedbackDelete(String(req.body?.id || ''));
+  res.status(204).end();
+});
+
 // ---------- admin ----------
 app.post('/api/admin/verify', writeLimiter, (req, res) => {
   if (!isAdminToken(req.body?.token)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ ok: true, total: store.search({ status: null, limit: 500 }).length });
+  res.json({ ok: true, total: store.search({ status: null, limit: 500 }).length, feedback: store.feedbackCount() });
 });
 
 // Remove every report and photo (e.g. test data before launch). Admin only.
@@ -466,6 +492,14 @@ function sendIndex(_req, res) {
   res.send(INDEX_HTML);
 }
 app.get(['/', '/index.html'], sendIndex);
+// The moderator pane opens only from the secret path (marked on <html>).
+const INDEX_ADMIN_HTML = INDEX_HTML.replace('<html lang="th">', '<html lang="th" data-admin="1">');
+app.get('/' + ADMIN_PATH, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(INDEX_ADMIN_HTML);
+});
 
 app.use(
   '/uploads',

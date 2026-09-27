@@ -15,7 +15,7 @@ let tmp;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plates-'));
   proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '', PHOTO_REQUIRED: 'false', RATE_WRITE_PER_HOUR: '1000' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '', PHOTO_REQUIRED: 'false', RATE_WRITE_PER_HOUR: '1000', ADMIN_PATH: 'secret-door-42' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('listening')) resolve(); }));
@@ -295,4 +295,31 @@ test('stats endpoint', async () => {
   assert.ok(typeof j.total === 'number' && j.total >= 0);
   assert.ok(Array.isArray(j.byProvince) && Array.isArray(j.daily));
   assert.equal(j.found + j.returned, j.total);
+});
+
+test('feedback can be submitted by anyone and read/deleted by admin; secret admin path', async () => {
+  let r = await fetch(BASE + '/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'praise', message: 'ทำได้ดีมาก สู้ๆ' }) });
+  assert.equal(r.status, 201);
+  r = await fetch(BASE + '/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: 'x' }) });
+  assert.equal(r.status, 400);
+  r = await fetch(BASE + '/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: 'spam', website: 'bot' }) });
+  assert.equal(r.status, 400);
+
+  r = await fetch(BASE + '/api/admin/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'wrong-wrong-wrong-wrong-wrong' }) });
+  assert.equal(r.status, 403);
+  r = await fetch(BASE + '/api/admin/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123' }) });
+  const j = await r.json();
+  assert.ok(j.count >= 1);
+  const mine = j.items.find((i) => i.message === 'ทำได้ดีมาก สู้ๆ');
+  assert.equal(mine.kind, 'praise');
+  r = await fetch(BASE + '/api/admin/feedback/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123', id: mine.id }) });
+  assert.equal(r.status, 204);
+
+  // secret path serves the page flagged for admin; the normal page is not flagged
+  r = await fetch(BASE + '/secret-door-42');
+  assert.equal(r.status, 200);
+  assert.ok((await r.text()).includes('data-admin="1"'));
+  assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow');
+  r = await fetch(BASE + '/');
+  assert.ok(!(await r.text()).includes('data-admin'));
 });
