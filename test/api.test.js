@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { normalizePlate, isPlausiblePlate } from '../src/plate.js';
-import { parseGeminiResponse, normalisePlates, chooseGeminiModel } from '../src/ocr.js';
+import { parseGeminiResponse, normalisePlates, chooseGeminiModel, rankGeminiModels } from '../src/ocr.js';
 
 const PORT = 3999;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -361,4 +361,5 @@ test('gemini model auto-selection', () => {
   assert.equal(chooseGeminiModel(list, 'gemini-2.0-flash'), 'gemini-2.0-flash'); // preferred present
   assert.equal(chooseGeminiModel(list, 'gemini-2.0-flash', new Set(['gemini-2.0-flash'])), 'gemini-3.0-flash'); // retired ones skipped
   assert.equal(chooseGeminiModel([{ name: 'models/x', supportedGenerationMethods: ['embedContent'] }], 'y'), null);
+  assert.deepEqual(rankGeminiModels(list, 'auto').slice(0, 2), ['gemini-3.0-flash', 'gemini-3.0-flash-lite']);
 });

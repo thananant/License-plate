@@ -386,8 +386,8 @@ app.post('/api/ocr', ocrLimiter, (req, res, next) => {
     res.json(out);
   } catch (e) {
     const code = e?.code || 'ocr_failed';
-    if (code === 'ocr_config' || code === 'ocr_failed') console.warn('ocr error:', code, e?.detail || e?.message || '');
-    const status = code === 'ai_declined' ? 422 : code === 'ocr_disabled' ? 503 : code === 'ocr_quota' ? 429 : 502;
+    if (code === 'ocr_config' || code === 'ocr_failed' || code === 'ocr_busy') console.warn('ocr error:', code, e?.detail || e?.message || '');
+    const status = code === 'ai_declined' ? 422 : code === 'ocr_disabled' || code === 'ocr_busy' ? 503 : code === 'ocr_quota' ? 429 : 502;
     res.status(status).json({ error: code });
   }
 });

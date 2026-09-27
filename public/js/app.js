@@ -423,8 +423,8 @@
           out = await api('/api/ocr', { method: 'POST', body: fd });
         } catch (err) {
           // AI unavailable (quota, outage, misconfiguration): fall back to on-device reading
-          if (['ocr_quota', 'ocr_failed', 'ocr_config', 'ocr_disabled', 'http_429', 'http_502', 'http_503'].includes(err.message)) {
-            st.textContent = 'AI ไม่ว่างชั่วคราว ใช้ตัวอ่านในเครื่องแทน…';
+          if (['ocr_quota', 'ocr_busy', 'ocr_failed', 'ocr_config', 'ocr_disabled', 'http_429', 'http_502', 'http_503'].includes(err.message)) {
+            st.textContent = err.message === 'ocr_busy' ? 'AI ของ Google คิวเต็มชั่วคราว ใช้ตัวอ่านในเครื่องแทน…' : 'AI ไม่ว่างชั่วคราว ใช้ตัวอ่านในเครื่องแทน…';
             out = await readLocal();
             out.fallback = true;
           } else throw err;
