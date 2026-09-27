@@ -34,13 +34,14 @@
   function setTab(name) {
     activeTab = name;
     // text-only tabs get the whole screen on phones; map tabs follow the visitor's choice
-    const textTab = name === 'stats' || name === 'help' || name === 'manage';
+    const textTab = name === 'stats' || name === 'help' || name === 'feedback' || name === 'manage';
     $('#map-toggle').hidden = textTab;
     if (isMobile()) setMapCollapsed(textTab ? true : userCollapsed);
     $$('.tab').forEach((b) => {
       const on = b.dataset.tab === name;
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', String(on));
+      if (on && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
     $$('.tabpane').forEach((p) => p.classList.toggle('active', p.dataset.pane === name));
     if (name === 'stats') loadStats();
@@ -54,10 +55,7 @@
   // from the secret ADMIN_PATH, and only then is the pane opened.
   const isAdminPage = document.documentElement.dataset.admin === '1';
   const feedbackLink = $('#feedback-link');
-  if (feedbackLink) feedbackLink.addEventListener('click', (e) => {
-    e.preventDefault(); setTab('help');
-    const box = $('#feedback'); if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+  if (feedbackLink) feedbackLink.addEventListener('click', (e) => { e.preventDefault(); setTab('feedback'); $('#panel').scrollTo({ top: 0 }); });
 
   // ---------- api ----------
   async function api(path, opts = {}) {

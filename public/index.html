@@ -25,6 +25,7 @@
       <button class="tab" data-tab="report" role="tab" aria-selected="false">📍 แจ้งพบป้าย</button>
       <button class="tab" data-tab="stats" role="tab" aria-selected="false">📊 สถิติ</button>
       <button class="tab" data-tab="help" role="tab" aria-selected="false">❓ หาไม่เจอทำไง</button>
+      <button class="tab" data-tab="feedback" role="tab" aria-selected="false">💬 เสนอแนะ</button>
     </nav>
   </header>
 
@@ -214,24 +215,6 @@
       <!-- ===== HELP ===== -->
       <section class="tabpane" data-pane="help">
         <div class="help">
-          <div class="feedback" id="feedback">
-            <h4 style="margin-top:0">💬 ข้อเสนอแนะ / ให้กำลังใจ</h4>
-            <p class="small muted">อยากให้ปรับปรุงอะไร ใช้แล้วติดตรงไหน หรือจะส่งกำลังใจให้ทีมงานก็ได้ 😊 ไม่ต้องใส่ชื่อหรือช่องทางติดต่อ</p>
-            <form id="feedback-form" autocomplete="off">
-              <div class="seg seg-small" style="margin-bottom:10px">
-                <label><input type="radio" name="kind" value="suggestion" checked><span>💡 ข้อเสนอแนะ</span></label>
-                <label><input type="radio" name="kind" value="praise"><span>💖 ให้กำลังใจ</span></label>
-                <label><input type="radio" name="kind" value="problem"><span>🐞 แจ้งปัญหา</span></label>
-              </div>
-              <label><span class="sr-only">ข้อความ</span><textarea name="message" id="fb-message" rows="4" maxlength="1000" required placeholder="พิมพ์ข้อความที่นี่…"></textarea></label>
-              <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-              <div class="actions" style="margin:0">
-                <button type="submit" class="btn primary" id="fb-submit">ส่งข้อความ</button>
-              </div>
-              <p id="fb-msg" class="msg" role="status"></p>
-            </form>
-          </div>
-
           <h3>หาป้ายไม่เจอ ทำยังไง?</h3>
           <p>หากป้ายทะเบียนรถยนต์หรือมอเตอร์ไซค์หลุดหายจากน้ำท่วม คุณสามารถไปติดต่อ<strong>ขอรับแผ่นป้ายใหม่ได้ที่กรมการขนส่งทางบก (สำนักงานขนส่งทั่วประเทศ) ได้ทันที</strong> โดยไม่ต้องไปแจ้งความที่สถานีตำรวจ</p>
           <p class="hint">💡 ระหว่างรอป้ายใหม่ ลองกลับมาค้นหาในแผนที่นี้เป็นระยะ อาจมีคนเก็บป้ายของคุณไว้ให้</p>
@@ -275,7 +258,28 @@
         </div>
       </section>
 
-      <!-- ===== MANAGE (admin only, open with #admin) ===== -->
+      <!-- ===== FEEDBACK ===== -->
+      <section class="tabpane" data-pane="feedback">
+          <div class="feedback" id="feedback">
+            <h4 style="margin-top:0">💬 ข้อเสนอแนะ / ให้กำลังใจ</h4>
+            <p class="small muted">อยากให้ปรับปรุงอะไร ใช้แล้วติดตรงไหน หรือจะส่งกำลังใจให้ทีมงานก็ได้ 😊 ไม่ต้องใส่ชื่อหรือช่องทางติดต่อ</p>
+            <form id="feedback-form" autocomplete="off">
+              <div class="seg seg-small" style="margin-bottom:10px">
+                <label><input type="radio" name="kind" value="suggestion" checked><span>💡 ข้อเสนอแนะ</span></label>
+                <label><input type="radio" name="kind" value="praise"><span>💖 ให้กำลังใจ</span></label>
+                <label><input type="radio" name="kind" value="problem"><span>🐞 แจ้งปัญหา</span></label>
+              </div>
+              <label><span class="sr-only">ข้อความ</span><textarea name="message" id="fb-message" rows="4" maxlength="1000" required placeholder="พิมพ์ข้อความที่นี่…"></textarea></label>
+              <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+              <div class="actions" style="margin:0">
+                <button type="submit" class="btn primary" id="fb-submit">ส่งข้อความ</button>
+              </div>
+              <p id="fb-msg" class="msg" role="status"></p>
+            </form>
+          </div>
+      </section>
+
+      <!-- ===== MANAGE (admin only, secret path) ===== -->
       <section class="tabpane" data-pane="manage">
         <div class="hint">หน้านี้สำหรับผู้ดูแลระบบ • คนทั่วไปไม่ต้องใช้: ถ้าเจ้าของมารับป้ายแล้ว กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย</div>
 
