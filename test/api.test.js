@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { normalizePlate, isPlausiblePlate } from '../src/plate.js';
+import { parseGeminiResponse, normalisePlates } from '../src/ocr.js';
 
 const PORT = 3999;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -328,4 +329,20 @@ test('feedback can be submitted by anyone and read/deleted by admin; secret admi
   assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow');
   r = await fetch(BASE + '/');
   assert.ok(!(await r.text()).includes('data-admin'));
+});
+
+test('gemini response parsing and plate normalisation', () => {
+  const json = { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ plates: [
+    { plate: '๑กข ๑๒๓๔', province: 'นนทบุรี', vehicle_type: 'car', confidence: 0.93, note: '' },
+    { plate: 'กข 12?', province: 'ไม่มีจริง', vehicle_type: 'motorcycle', confidence: 1.7, note: 'มีคราบ' },
+  ] }) }] } }] };
+  const plates = normalisePlates(parseGeminiResponse(json));
+  assert.equal(plates.length, 2);
+  assert.equal(plates[0].plate, '1กข 1234');
+  assert.equal(plates[0].plausible, true);
+  assert.equal(plates[1].province, '');
+  assert.equal(plates[1].confidence, 1);
+  assert.equal(plates[1].plausible, false);
+  assert.throws(() => parseGeminiResponse({ promptFeedback: { blockReason: 'SAFETY' } }), /ai_declined/);
+  assert.throws(() => parseGeminiResponse({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'not json' }] } }] }), /ocr_failed/);
 });

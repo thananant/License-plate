@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { openDatabase, toPublic } from './db.js';
 import { PROVINCES, PROVINCE_SET, VEHICLE_TYPES } from './provinces.js';
 import { normalizePlate, cleanPlateDisplay, isPlausiblePlate } from './plate.js';
-import { readPlates, ocrEnabled, OCR_MODEL } from './ocr.js';
+import { readPlates, ocrEnabled, OCR_MODEL, OCR_PROVIDER } from './ocr.js';
 import { dhash, hamming } from './phash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,6 +205,7 @@ app.get('/api/config', readLimiter, (_req, res) => {
     vehicleTypes: VEHICLE_TYPES,
     limits: { maxPhotoBytes: MAX_PHOTO_BYTES, maxNote: MAX_NOTE, maxPlaceNote: MAX_PLACE_NOTE },
     ocrEnabled,
+    ocrProvider: OCR_PROVIDER,
     photoRequired: PHOTO_REQUIRED,
     maxPlates: MAX_PLATES_PER_REPORT,
     totalFound: store.countFound(),
@@ -383,7 +384,8 @@ app.post('/api/ocr', ocrLimiter, (req, res, next) => {
     res.json(out);
   } catch (e) {
     const code = e?.code || 'ocr_failed';
-    const status = code === 'ai_declined' ? 422 : code === 'ocr_disabled' ? 503 : 502;
+    if (code === 'ocr_config' || code === 'ocr_failed') console.warn('ocr error:', code, e?.detail || e?.message || '');
+    const status = code === 'ai_declined' ? 422 : code === 'ocr_disabled' ? 503 : code === 'ocr_quota' ? 429 : 502;
     res.status(status).json({ error: code });
   }
 });
@@ -548,7 +550,7 @@ const purgeTimer = setInterval(purge, 6 * 60 * 60_000);
 purgeTimer.unref();
 
 const server = app.listen(PORT, () => {
-  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'}, admin: ${ADMIN_TOKEN_HASH ? 'on' : 'off'}, ai: ${ocrEnabled ? OCR_MODEL : 'off'})`);
+  console.log(`plate-finder listening on :${PORT} (map: ${GOOGLE_MAPS_API_KEY ? 'google' : 'osm'}, admin: ${ADMIN_TOKEN_HASH ? 'on' : 'off'}, ai: ${ocrEnabled ? OCR_PROVIDER + '/' + OCR_MODEL : 'off (on-device tesseract)'})`);
   if (ADMIN_TOKEN && !ADMIN_TOKEN_HASH) console.warn('ADMIN_TOKEN ignored: must be at least 24 characters');
 });
 

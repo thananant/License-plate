@@ -8,6 +8,21 @@
   let workerPromise = null;
   let scriptLoaded = false;
 
+  // Tunables (exposed for experiments via LocalOCR.configure({...})).
+  const OPTS = {
+    lang: 'tha',            // 'tha' (fast) or 'tha_best' (int8 "best" model)
+    whitelist: '',          // e.g. Thai consonants + digits; '' = off
+    cropWidth: 1000,        // upscaled crop width in px
+    cropMarginX: 0.07, cropMarginY: 0.10,
+    psms: ['6', '4'],       // page segmentation modes for the plain pass
+    variants: true,         // try normalised / binarised variants when the plain read is weak
+    goodConf: 0.8,          // stop trying variants once a plate reaches this confidence with a province
+    detectWidth: 480, closeRadius: 1, satChroma: 40, satLum: 100,
+    provStripHeight: 260, provRotations: [0, -5, 5, -10, 10],
+    workerParams: {},       // extra Tesseract parameters
+  };
+  function configure(o) { Object.assign(OPTS, o || {}); if (o && (o.lang || o.workerParams || o.whitelist !== undefined)) workerPromise = null; return { ...OPTS }; }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -20,7 +35,7 @@
     if (workerPromise) return workerPromise;
     workerPromise = (async () => {
       if (!scriptLoaded) { await loadScript(`${BASE}/tesseract.min.js`); scriptLoaded = true; }
-      const worker = await Tesseract.createWorker('tha', 1, {
+      const worker = await Tesseract.createWorker(OPTS.lang, 1, {
         workerPath: `${BASE}/worker.min.js`,
         corePath: BASE,
         langPath: `${BASE}/lang`,
@@ -30,7 +45,9 @@
         cacheMethod: 'none',
         logger: (m) => { if (onProgress) onProgress(m); },
       });
-      await worker.setParameters({ preserve_interword_spaces: '1', user_defined_dpi: '300' });
+      const params = { preserve_interword_spaces: '1', user_defined_dpi: '300', ...OPTS.workerParams };
+      if (OPTS.whitelist) params.tessedit_char_whitelist = OPTS.whitelist;
+      await worker.setParameters(params);
       return worker;
     })();
     workerPromise.catch(() => { workerPromise = null; });
@@ -249,7 +266,7 @@
   // Plates are bright rectangles with dark glyphs. Find bright connected
   // components on a small grayscale copy and keep the plate-shaped ones.
   function findPlateRegions(color) {
-    const W = 480;
+    const W = OPTS.detectWidth;
     const sc = Math.min(1, W / color.width);
     const w = Math.max(1, Math.round(color.width * sc)), h = Math.max(1, Math.round(color.height * sc));
     const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -263,7 +280,7 @@
       const l = (r * 299 + gg * 587 + b * 114) / 1000;
       g[j] = l; sum += l;
       // coloured plates (yellow, auction gradients, green text plates) vs grey concrete/asphalt
-      sat[j] = Math.max(r, gg, b) - Math.min(r, gg, b) > 40 && l > 100 ? 1 : 0; // muddy brown ground stays below this
+      sat[j] = Math.max(r, gg, b) - Math.min(r, gg, b) > OPTS.satChroma && l > OPTS.satLum ? 1 : 0; // muddy brown ground stays below this
     }
     const mean = sum / (w * h);
     const thresholds = [Math.max(150, Math.min(210, mean + 45)), 225];
@@ -293,7 +310,8 @@
       if (mask[i]) { dil[i] = 1; continue; }
       let on = 0;
       // 1-px closing only: a wider one would bridge the thin frame between stacked plates
-      for (let dy = -1; dy <= 1 && !on; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const R = OPTS.closeRadius;
+      for (let dy = -R; dy <= R && !on; dy++) for (let dx = -R; dx <= R; dx++) {
         const yy = y + dy, xx = x + dx;
         if (yy >= 0 && yy < h && xx >= 0 && xx < w && mask[yy * w + xx]) { on = 1; break; }
       }
@@ -330,10 +348,10 @@
   }
 
   function cropRegion(canvas, r) {
-    const mx = (r.x1 - r.x0) * 0.07, my = (r.y1 - r.y0) * 0.1; // room for tilted corners
+    const mx = (r.x1 - r.x0) * OPTS.cropMarginX, my = (r.y1 - r.y0) * OPTS.cropMarginY; // room for tilted corners
     const x = Math.max(0, r.x0 - mx), y = Math.max(0, r.y0 - my);
     const w = Math.min(canvas.width - x, r.x1 - r.x0 + 2 * mx), h = Math.min(canvas.height - y, r.y1 - r.y0 + 2 * my);
-    const target = 1000, sc = target / w;
+    const target = OPTS.cropWidth, sc = target / w;
     const c = document.createElement('canvas'); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
     const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(canvas, x, y, w, h, 0, 0, c.width, c.height);
@@ -403,9 +421,9 @@
   // plain read is weak. Enhancement helps stained plates but adds noise on
   // clean ones, so it is a fallback, not a default.
   async function ocrCanvas(worker, canvas, provinces, variants = true) {
-    let lines = await ocrPass(worker, canvas, ['6', '4']);
-    const good = (ls) => vote(parseLines(ls, provinces)).some((r) => r.plate && r.confidence >= 0.8 && r.province);
-    if (variants && !good(lines)) {
+    let lines = await ocrPass(worker, canvas, OPTS.psms);
+    const good = (ls) => vote(parseLines(ls, provinces)).some((r) => r.plate && r.confidence >= OPTS.goodConf && r.province);
+    if (variants && OPTS.variants && !good(lines)) {
       const normd = localNormalize(canvas);
       lines = lines.concat(await ocrPass(worker, normd, ['6']));
       if (!good(lines)) lines = lines.concat(await ocrPass(worker, binarize(normd), ['6']));
@@ -422,10 +440,10 @@
     const y = Math.min(crop.height - 1, bbox.y1 - (bbox.y1 - bbox.y0) * 0.05);
     const h = crop.height - y;
     if (h < 20) return null;
-    const target = 260, sc = target / h;
+    const target = OPTS.provStripHeight, sc = target / h;
     let best = null;
     // photos are rarely level: retry the strip at small rotations
-    for (const deg of [0, -5, 5, -10, 10]) {
+    for (const deg of OPTS.provRotations) {
       const c = document.createElement('canvas'); c.width = Math.round(crop.width * sc); c.height = Math.round(h * sc);
       const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
@@ -497,5 +515,5 @@
     return { plates: rows.slice(0, 20), model: 'tesseract-tha' };
   }
 
-  window.LocalOCR = { readPlates, parseLines, norm };
+  window.LocalOCR = { readPlates, parseLines, norm, configure, findPlateRegions, toCanvas, localNormalize, binarize };
 })();

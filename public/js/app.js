@@ -31,11 +31,19 @@
   function showMapIfNeeded() { if (isMobile() && document.body.classList.contains('map-collapsed')) { userCollapsed = false; setMapCollapsed(false); } }
 
   // ---------- tabs ----------
+  const isTextTab = (name) => name === 'stats' || name === 'help' || name === 'feedback' || name === 'manage';
+  // rotating the phone or resizing across the breakpoint must re-apply the map state
+  const mq = window.matchMedia('(max-width: 800px)');
+  mq.addEventListener('change', () => {
+    if (mq.matches) setMapCollapsed(isTextTab(activeTab) ? true : userCollapsed);
+    else { setMapCollapsed(false); if (map) setTimeout(() => map.resize && map.resize(), 50); }
+  });
   function setTab(name) {
     activeTab = name;
     // text-only tabs get the whole screen on phones; map tabs follow the visitor's choice
-    const textTab = name === 'stats' || name === 'help' || name === 'feedback' || name === 'manage';
+    const textTab = isTextTab(name);
     $('#map-toggle').hidden = textTab;
+    $('.sheet-bar').hidden = textTab;
     if (isMobile()) setMapCollapsed(textTab ? true : userCollapsed);
     $$('.tab').forEach((b) => {
       const on = b.dataset.tab === name;
@@ -240,6 +248,8 @@
     $('#claim-form').hidden = false; $('#d-claim-buttons').hidden = true;
     $('#c-note').focus();
   }
+  const detailDlg = $('#detail');
+  detailDlg.addEventListener('click', (e) => { if (e.target === detailDlg) detailDlg.close(); }); // tap on the backdrop
   $('#d-claim-open').addEventListener('click', () => openClaimForm('returned'));
   $('#d-moved-open').addEventListener('click', () => openClaimForm('moved'));
   $('#c-cancel').addEventListener('click', () => { $('#claim-form').hidden = true; $('#d-claim-buttons').hidden = false; });
@@ -323,7 +333,8 @@
       return;
     }
     if (gpsWatchId != null) { stopGps(); return; } // second press = stop early
-    const btn = $('#r-geoloc'); btn.disabled = false; btn.textContent = '⏳ กำลังหาตำแหน่ง… (กดอีกครั้งเพื่อหยุด)';
+    const btn = $('#r-geoloc'); btn.disabled = false; btn.textContent = '⏹ หยุดค้นหา';
+    $('#r-locstatus').textContent = 'กำลังหาตำแหน่ง…';
     let best = null;
     const started = Date.now();
     gpsWatchId = navigator.geolocation.watchPosition(
@@ -399,18 +410,28 @@
     const btn = $('#r-ai'); const st = $('#ai-status');
     btn.disabled = true; st.className = 'small spin'; st.style.color = '';
     st.textContent = cfg.ocrEnabled ? 'AI กำลังอ่านป้าย… ประมาณ 5-15 วินาที' : 'กำลังเตรียมตัวอ่านป้าย…';
+    const readLocal = () => window.LocalOCR.readPlates(f, cfg.provinces, (m) => {
+      if (m.status === 'loading tesseract core' || m.status === 'initializing tesseract') st.textContent = 'กำลังโหลดตัวอ่านป้าย (ครั้งแรกประมาณ 4 MB)…';
+      else if (m.status === 'loading language traineddata') st.textContent = `กำลังโหลดโมเดลภาษาไทย… ${Math.round((m.progress || 0) * 100)}%`;
+      else if (m.status === 'recognizing text') st.textContent = `กำลังอ่านป้าย… ${Math.round((m.progress || 0) * 100)}%`;
+    });
     try {
       let out;
       if (cfg.ocrEnabled) {
-        const fd = new FormData(); fd.set('photo', f);
-        out = await api('/api/ocr', { method: 'POST', body: fd });
+        try {
+          const fd = new FormData(); fd.set('photo', f);
+          out = await api('/api/ocr', { method: 'POST', body: fd });
+        } catch (err) {
+          // AI unavailable (quota, outage, misconfiguration): fall back to on-device reading
+          if (['ocr_quota', 'ocr_failed', 'ocr_config', 'ocr_disabled', 'http_429', 'http_502', 'http_503'].includes(err.message)) {
+            st.textContent = 'AI ไม่ว่างชั่วคราว ใช้ตัวอ่านในเครื่องแทน…';
+            out = await readLocal();
+            out.fallback = true;
+          } else throw err;
+        }
       } else {
         // Free path: Tesseract runs in this browser, the photo never leaves the device.
-        out = await window.LocalOCR.readPlates(f, cfg.provinces, (m) => {
-          if (m.status === 'loading tesseract core' || m.status === 'initializing tesseract') st.textContent = 'กำลังโหลดตัวอ่านป้าย (ครั้งแรกประมาณ 4 MB)…';
-          else if (m.status === 'loading language traineddata') st.textContent = `กำลังโหลดโมเดลภาษาไทย… ${Math.round((m.progress || 0) * 100)}%`;
-          else if (m.status === 'recognizing text') st.textContent = `กำลังอ่านป้าย… ${Math.round((m.progress || 0) * 100)}%`;
-        });
+        out = await readLocal();
       }
       st.className = 'muted small';
       if (!out.plates.length) { st.textContent = 'ไม่พบป้ายทะเบียนในรูป ลองถ่ายใหม่ให้ชัด ตรง และใกล้ขึ้น หรือกรอกเอง'; return; }
@@ -418,7 +439,7 @@
       out.plates.forEach((p) => addPlateRow(p));
       renumberRows();
       const low = out.plates.filter((p) => p.confidence < 0.7 || !p.plausible || !p.province).length;
-      st.textContent = `พบ ${out.plates.length} แผ่น` + (low ? ` · ${low} แผ่นควรตรวจสอบเป็นพิเศษ (กรอบสีเหลือง)` : ' · โปรดตรวจสอบก่อนส่ง');
+      st.textContent = `พบ ${out.plates.length} แผ่น` + (low ? ` · ${low} แผ่นควรตรวจสอบเป็นพิเศษ (กรอบสีเหลือง)` : ' · โปรดตรวจสอบก่อนส่ง') + (out.fallback ? ' · (อ่านด้วยตัวอ่านในเครื่อง)' : '');
       $('#plate-rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       console.warn('ocr failed', err);
@@ -794,7 +815,8 @@
       $('#map-fallback').hidden = false;
     }
     await runSearch({ fit: true });
-    if (isAdminPage) setTab('manage');
+    if (isMobile() && window.innerHeight < 700 && !isAdminPage) setMapCollapsed(true); // short phones: list first
+    if (isAdminPage) { $('#tab-manage').hidden = false; setTab('manage'); }
   }
   init();
 })();

@@ -26,6 +26,7 @@
       <button class="tab" data-tab="stats" role="tab" aria-selected="false">📊 สถิติ</button>
       <button class="tab" data-tab="help" role="tab" aria-selected="false">❓ หาไม่เจอทำไง</button>
       <button class="tab" data-tab="feedback" role="tab" aria-selected="false">💬 เสนอแนะ/ให้กำลังใจ</button>
+      <button class="tab" data-tab="manage" role="tab" aria-selected="false" id="tab-manage" hidden>🔑 ผู้ดูแล</button>
     </nav>
   </header>
 
@@ -82,7 +83,7 @@
 
       <!-- ===== REPORT ===== -->
       <section class="tabpane" data-pane="report">
-        <form id="report-form" autocomplete="off" enctype="multipart/form-data">
+        <form id="report-form" autocomplete="off" enctype="multipart/form-data" novalidate>
           <div class="step">
             <div class="step-head"><span class="step-num">1</span><strong>ถ่ายรูปป้าย <em id="s1-req">*</em></strong> <span class="muted small" id="s1-hint">ถ่ายจากกล้องเท่านั้น</span></div>
             <button type="button" class="btn primary block" id="r-shoot">📷 เปิดกล้องถ่ายป้าย</button>
