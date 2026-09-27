@@ -53,6 +53,8 @@ export function openDatabase(dataDir) {
     expired: db.prepare(`SELECT id, photo, claim_photo FROM reports WHERE status = 'returned' AND updated_at < ?`),
     recentHashes: db.prepare(`SELECT id, photo_hash, plate_display, province FROM reports WHERE photo_hash IS NOT NULL AND created_at > ?`),
     photoRefs: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE photo = ? OR claim_photo = ?`),
+    allFiles: db.prepare(`SELECT photo, claim_photo FROM reports`),
+    deleteAll: db.prepare(`DELETE FROM reports`),
     delete: db.prepare(`DELETE FROM reports WHERE id = ?`),
     count: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE status = 'found'`),
   };
@@ -110,6 +112,12 @@ export function openDatabase(dataDir) {
     },
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
+    /** Delete every report; returns the photo file names that were referenced. */
+    wipe: () => {
+      const files = stmts.allFiles.all().flatMap((r) => [r.photo, r.claim_photo]).filter(Boolean);
+      stmts.deleteAll.run();
+      return files;
+    },
     search,
     close: () => db.close(),
   };

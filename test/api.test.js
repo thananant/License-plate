@@ -15,7 +15,7 @@ let tmp;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plates-'));
   proc = spawn(process.execPath, ['src/server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '', PHOTO_REQUIRED: 'false' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: tmp, GOOGLE_MAPS_API_KEY: '', ADMIN_TOKEN: 'test-admin-token-with-enough-length-123', ANTHROPIC_API_KEY: '', PHOTO_REQUIRED: 'false', RATE_WRITE_PER_HOUR: '1000' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('listening')) resolve(); }));
@@ -240,4 +240,24 @@ test('duplicate plate inside one submission is rejected', async () => {
   const r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
   assert.equal(r.status, 400);
   assert.equal((await r.json()).fields.plate, 'duplicate');
+});
+
+test('admin verify and wipe', async () => {
+  const fd = new FormData();
+  fd.set('plate', 'ฉฉ 77'); fd.set('province', 'น่าน'); fd.set('vehicleType', 'car'); fd.set('lat', '18.7'); fd.set('lng', '100.7');
+  let r = await fetch(BASE + '/api/reports', { method: 'POST', body: fd });
+  assert.equal(r.status, 201);
+
+  r = await fetch(BASE + '/api/admin/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'nope-nope-nope-nope-nope-nope' }) });
+  assert.equal(r.status, 403);
+  r = await fetch(BASE + '/api/admin/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123' }) });
+  assert.equal(r.status, 200);
+  assert.ok((await r.json()).total >= 1);
+
+  r = await fetch(BASE + '/api/admin/wipe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123' }) });
+  assert.equal(r.status, 400); // confirm missing
+  r = await fetch(BASE + '/api/admin/wipe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-admin-token-with-enough-length-123', confirm: 'WIPE' }) });
+  assert.equal(r.status, 200);
+  r = await fetch(BASE + '/api/reports?status=all');
+  assert.equal((await r.json()).count, 0);
 });

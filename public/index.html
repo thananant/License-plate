@@ -215,17 +215,39 @@
 
       <!-- ===== MANAGE (admin only, open with #admin) ===== -->
       <section class="tabpane" data-pane="manage">
-        <form id="manage-form" autocomplete="off">
-          <p class="hint">สำหรับผู้ดูแลระบบ หรือผู้แจ้งที่เก็บรหัสไว้ • คนทั่วไปไม่ต้องใช้หน้านี้: ถ้าเจ้าของมารับป้ายแล้ว กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย</p>
-          <label><span>รหัสรายงาน</span><input id="m-id" required placeholder="เช่น A1b2C3d4E5f6"></label>
-          <label><span>รหัสจัดการ</span><input id="m-token" required placeholder="รหัส 32 ตัวอักษร"></label>
+        <div class="hint">หน้านี้สำหรับผู้ดูแลระบบ • คนทั่วไปไม่ต้องใช้: ถ้าเจ้าของมารับป้ายแล้ว กดปุ่ม "คืนเจ้าของแล้ว" ที่รายการได้เลย</div>
+
+        <form id="admin-form" autocomplete="off" style="margin-top:14px">
+          <label><span>รหัสผู้ดูแล</span><input id="a-token" type="password" required placeholder="ADMIN_TOKEN"></label>
           <div class="actions">
-            <button type="submit" class="btn primary" data-action="returned">✅ คืนเจ้าของแล้ว</button>
-            <button type="submit" class="btn" data-action="found">↩️ ยังไม่มีคนมารับ</button>
-            <button type="submit" class="btn danger" data-action="delete">🗑️ ลบรายงาน</button>
+            <button type="submit" class="btn primary" id="a-login">🔓 เปิดโหมดผู้ดูแล</button>
+            <button type="button" class="btn" id="a-logout" hidden>ออกจากโหมดผู้ดูแล</button>
           </div>
-          <p id="m-msg" class="msg" role="status"></p>
+          <p id="a-msg" class="msg" role="status"></p>
         </form>
+
+        <div id="admin-tools" hidden>
+          <p class="small">โหมดผู้ดูแลเปิดอยู่: ในแท็บ "ค้นหาป้าย" ทุกรายการจะมีปุ่ม 🗑️ ลบ และปุ่มคืนสถานะ (รหัสไม่ถูกบันทึกไว้ในเครื่อง ปิดหน้าแล้วต้องใส่ใหม่)</p>
+          <div class="danger-zone">
+            <strong>ล้างข้อมูลทั้งหมด</strong>
+            <p class="small muted">ลบทุกรายงานและทุกรูปถาวร ใช้ก่อนเปิดใช้งานจริงเพื่อล้างข้อมูลทดลอง</p>
+            <button type="button" class="btn danger" id="a-wipe">🧹 ล้างข้อมูลทั้งหมด</button>
+          </div>
+        </div>
+
+        <details style="margin-top:16px">
+          <summary class="muted small">ใช้รหัสจัดการของรายงานเดี่ยว (สำหรับผู้แจ้งที่เก็บรหัสไว้)</summary>
+          <form id="manage-form" autocomplete="off" style="margin-top:10px">
+            <label><span>รหัสรายงาน</span><input id="m-id" required placeholder="เช่น A1b2C3d4E5f6"></label>
+            <label><span>รหัสจัดการ</span><input id="m-token" required placeholder="รหัส 32 ตัวอักษร"></label>
+            <div class="actions">
+              <button type="submit" class="btn primary" data-action="returned">✅ คืนเจ้าของแล้ว</button>
+              <button type="submit" class="btn" data-action="found">↩️ ยังไม่มีคนมารับ</button>
+              <button type="submit" class="btn danger" data-action="delete">🗑️ ลบรายงาน</button>
+            </div>
+            <p id="m-msg" class="msg" role="status"></p>
+          </form>
+        </details>
       </section>
 
       <footer class="panel-foot">

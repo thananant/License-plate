@@ -113,6 +113,15 @@
         img.className = 'thumb'; img.loading = 'lazy'; img.alt = ''; img.src = '/uploads/' + encodeURIComponent(r.photo);
         li.appendChild(img);
       }
+      if (adminToken) {
+        const row = document.createElement('div'); row.className = 'admin-row';
+        const del = document.createElement('button'); del.type = 'button'; del.className = 'btn small danger'; del.textContent = '🗑️ ลบ';
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); adminDelete(r); });
+        const st = document.createElement('button'); st.type = 'button'; st.className = 'btn small';
+        st.textContent = r.status === 'returned' ? '↩️ กลับเป็นยังไม่มีคนรับ' : '✅ คืนแล้ว';
+        st.addEventListener('click', (ev) => { ev.stopPropagation(); adminStatus(r, r.status === 'returned' ? 'found' : 'returned'); });
+        row.append(del, st); li.appendChild(row);
+      }
       const open = () => { if (map) map.panTo({ lat: r.lat, lng: r.lng }, Math.max(map.getZoom(), 17)); openDetail(r); };
       li.addEventListener('click', open);
       li.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
@@ -497,6 +506,56 @@
     $('#r-locstatus').textContent = 'ยังไม่ได้ปักหมุด'; $('#r-locstatus').className = 'muted';
     $('#report-form').hidden = false; $('#r-success').hidden = true;
   });
+
+  // ---------- admin mode (token kept in memory only) ----------
+  let adminToken = null;
+  function setAdmin(token) {
+    adminToken = token;
+    $('#admin-tools').hidden = !token;
+    $('#a-logout').hidden = !token;
+    $('#a-login').hidden = !!token;
+    $('#a-token').disabled = !!token;
+    let badge = $('#admin-badge');
+    if (token && !badge) { badge = document.createElement('div'); badge.id = 'admin-badge'; badge.className = 'admin-badge'; badge.textContent = '🔓 โหมดผู้ดูแล'; document.body.appendChild(badge); }
+    if (!token && badge) badge.remove();
+    runSearch();
+  }
+  $('#admin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = $('#a-token').value.trim(); const msg = $('#a-msg'); msg.className = 'msg'; msg.textContent = '';
+    try {
+      const out = await api('/api/admin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+      setAdmin(token);
+      msg.className = 'msg ok'; msg.textContent = `เข้าสู่โหมดผู้ดูแลแล้ว (มี ${out.total} รายการในระบบ)`;
+      setTab('search');
+    } catch (err) {
+      msg.className = 'msg err'; msg.textContent = err.status === 403 ? 'รหัสผู้ดูแลไม่ถูกต้อง' : err.status === 429 ? 'ลองบ่อยเกินไป กรุณารอสักครู่' : 'เชื่อมต่อไม่สำเร็จ';
+    }
+  });
+  $('#a-logout').addEventListener('click', () => { setAdmin(null); $('#a-token').value = ''; $('#a-msg').textContent = ''; });
+  $('#a-wipe').addEventListener('click', async () => {
+    if (!adminToken) return;
+    const typed = window.prompt('การล้างข้อมูลลบทุกรายงานและทุกรูปถาวร กู้คืนไม่ได้\nพิมพ์คำว่า  ลบทั้งหมด  เพื่อยืนยัน');
+    if (typed !== 'ลบทั้งหมด') return;
+    try {
+      const out = await api('/api/admin/wipe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: adminToken, confirm: 'WIPE' }) });
+      alert(`ล้างข้อมูลแล้ว (ลบรูป ${out.deleted} ไฟล์)`);
+      runSearch();
+    } catch { alert('ล้างข้อมูลไม่สำเร็จ'); }
+  });
+  async function adminDelete(r) {
+    if (!confirm(`ลบรายงาน ${r.plate_display} ${r.province} ถาวร?`)) return;
+    try {
+      await api('/api/reports/' + encodeURIComponent(r.id), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: adminToken }) });
+      runSearch();
+    } catch { alert('ลบไม่สำเร็จ'); }
+  }
+  async function adminStatus(r, status) {
+    try {
+      await api('/api/reports/' + encodeURIComponent(r.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: adminToken, status }) });
+      runSearch();
+    } catch { alert('อัปเดตไม่สำเร็จ'); }
+  }
 
   // ---------- manage ----------
   $('#manage-form').addEventListener('submit', async (e) => {

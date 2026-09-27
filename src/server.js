@@ -100,8 +100,8 @@ app.use((_req, res, next) => {
 });
 
 // Rate limits (kept in memory only; nothing is written to disk or logs).
-const readLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false });
-const writeLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+const readLimiter = rateLimit({ windowMs: 60_000, limit: Number(process.env.RATE_READ_PER_MIN || 120), standardHeaders: 'draft-7', legacyHeaders: false });
+const writeLimiter = rateLimit({ windowMs: 60 * 60_000, limit: Number(process.env.RATE_WRITE_PER_HOUR || 20), standardHeaders: 'draft-7', legacyHeaders: false });
 // AI reads cost money: tighter per-IP limit plus a global daily cap.
 const ocrLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 12, standardHeaders: 'draft-7', legacyHeaders: false });
 const OCR_DAILY_LIMIT = Number(process.env.OCR_DAILY_LIMIT || 500);
@@ -138,6 +138,10 @@ function hashEquals(hexA, hexB) {
   const a = Buffer.from(hexA, 'hex');
   const b = Buffer.from(hexB, 'hex');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function isAdminToken(token) {
+  return ADMIN_TOKEN_HASH != null && typeof token === 'string' && token.length >= 24 && token.length <= 128 && hashEquals(ADMIN_TOKEN_HASH, sha256(token));
 }
 
 function checkToken(row, token) {
@@ -389,6 +393,23 @@ app.delete('/api/reports/:id', writeLimiter, async (req, res) => {
   await removePhoto(row.photo);
   await removePhoto(row.claim_photo);
   res.status(204).end();
+});
+
+// ---------- admin ----------
+app.post('/api/admin/verify', writeLimiter, (req, res) => {
+  if (!isAdminToken(req.body?.token)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ ok: true, total: store.search({ status: null, limit: 500 }).length });
+});
+
+// Remove every report and photo (e.g. test data before launch). Admin only.
+app.post('/api/admin/wipe', writeLimiter, async (req, res) => {
+  if (!isAdminToken(req.body?.token)) return res.status(403).json({ error: 'forbidden' });
+  if (req.body?.confirm !== 'WIPE') return res.status(400).json({ error: 'confirm_required' });
+  const files = store.wipe();
+  for (const f of files) {
+    try { await fs.unlink(path.join(UPLOAD_DIR, path.basename(f))); } catch { /* ignore */ }
+  }
+  res.json({ ok: true, deleted: files.length });
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));

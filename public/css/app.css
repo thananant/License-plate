@@ -294,3 +294,9 @@ body.cam-open { overflow: hidden; }
 .help .links a { color: var(--red-dark); font-weight: 600; }
 .help .warn { margin-top: 12px; }
 .panel-foot a { color: var(--ink-2); text-decoration: underline dotted; }
+
+/* ============ admin ============ */
+.danger-zone { border: 1.5px solid #f3c9c6; background: #fff7f6; border-radius: var(--radius-sm); padding: 12px; margin-top: 12px; }
+.danger-zone strong { color: var(--danger); display: block; margin-bottom: 4px; }
+.results .admin-row { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 6px; }
+.admin-badge { position: fixed; left: 12px; bottom: 12px; z-index: 40; background: var(--ink); color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 999px; box-shadow: var(--shadow); }
