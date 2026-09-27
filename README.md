@@ -60,10 +60,17 @@ npm start              # http://localhost:3000
 
 ### Railway (แนะนำสำหรับมือใหม่)
 
-1. New Project → Deploy from GitHub repo → เลือก repo นี้ (มี `railway.json` และ `Dockerfile` ให้แล้ว)
-2. Variables: `DATA_DIR=/data`, `TRUST_PROXY=true`, `ADMIN_TOKEN=<รหัสยาว ๆ>`
-3. Settings → Volumes → Add Volume, Mount Path `/data`
-4. Settings → Networking → Generate Domain
+1. **New Project → GitHub Repo** → เลือก repo นี้ (มี `railway.json` และ `Dockerfile` ให้แล้ว)
+2. **Variables** เพิ่ม:
+   - `DATA_DIR` = `/data`
+   - `TRUST_PROXY` = `true`
+   - `ADMIN_TOKEN` = รหัสยาว ≥ 24 ตัว
+   - `RAILWAY_RUN_UID` = `0` (จำเป็น: Volume ของ Railway เป็นของ root แต่ image รันเป็น user `node` ถ้าไม่ตั้งแอปจะพังตอนสร้างโฟลเดอร์ใน `/data`)
+3. **Volume**: คลิกขวาที่กล่อง service → Attach Volume → Mount Path `/data`
+4. **Settings → Networking → Generate Domain** → Port ใส่ **`8080`** (Railway กำหนด `PORT=8080` ให้ container เอง ไม่ใช่ 3000)
+5. รอสถานะ Online แล้วเปิดโดเมน
+
+ข้อควรรู้: Railway ไม่รับ Dockerfile ที่มีคำสั่ง `VOLUME` หรือ `HEALTHCHECK` (build จะล้มที่ขั้น validation) Dockerfile ในโปรเจกต์นี้จึงไม่มีสองคำสั่งนั้น
 
 ### Docker
 
