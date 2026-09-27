@@ -802,7 +802,13 @@
     fillProvinces();
     addPlateRow();
     if (!cfg.photoRequired) { $('#s1-req').hidden = true; $('#s1-hint').textContent = 'ไม่บังคับ • ถ่ายจากกล้องเท่านั้น'; }
-    if (cfg.ocrEnabled) $('#s1-note').textContent = 'ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • ระบบลบ EXIF/GPS ในรูปและย่อขนาดอัตโนมัติ';
+    if (cfg.ocrEnabled) {
+      const name = cfg.ocrProvider === 'gemini' ? 'Gemini' : cfg.ocrProvider === 'anthropic' ? 'Claude' : 'AI';
+      $('#s1-note').textContent = `อ่านเลขด้วย AI (${name}) ถ่ายให้เห็นทุกแผ่นชัด ๆ ในรูปเดียวได้ AI จะแยกให้ทีละแผ่น • รูปถูกส่งไปให้ AI อ่านเฉพาะตอนกดปุ่ม • ระบบลบ EXIF/GPS อัตโนมัติ`;
+      $('#r-ai').textContent = `✨ อ่านเลขทะเบียนด้วย AI (${name})`;
+    } else {
+      $('#r-ai').textContent = '🔍 อ่านเลขทะเบียนอัตโนมัติ (ตัวอ่านในเครื่อง)';
+    }
     try {
       map = await window.PlateMap.createMap($('#map'), cfg);
       map.onClick((p) => { if (activeTab === 'report') setDraft(p); });
