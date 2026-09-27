@@ -108,8 +108,11 @@
   class LeafletMap {
     constructor(el, center, zoom) {
       this.map = L.map(el, { zoomControl: true, attributionControl: true }).setView([center.lat, center.lng], zoom);
-      this.street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>',
+      // OSM's tile usage policy requires a Referer identifying the site, otherwise
+      // tiles return 403 "Access blocked". Send only our origin, nothing else.
+      this.street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, referrerPolicy: 'origin',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>',
       }).addTo(this.map);
       this.sat = null;
       this.layer = L.layerGroup().addTo(this.map);
@@ -132,7 +135,7 @@
       if (this.sat) { this.map.removeLayer(this.sat); this.sat = null; this.street.addTo(this.map); return false; }
       this.map.removeLayer(this.street);
       this.sat = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '&copy; OpenStreetMap, HOT',
+        maxZoom: 19, referrerPolicy: 'origin', attribution: '&copy; OpenStreetMap, HOT',
       }).addTo(this.map);
       return true;
     }

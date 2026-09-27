@@ -64,7 +64,7 @@ app.use(
           'https://*.googleapis.com',
           'https://*.gstatic.com',
           'https://*.ggpht.com',
-          'https://*.tile.openstreetmap.org',
+          'https://tile.openstreetmap.org',
           'https://*.tile.openstreetmap.fr',
         ],
         'connect-src': ["'self'", 'https://maps.googleapis.com', 'https://*.googleapis.com'],
