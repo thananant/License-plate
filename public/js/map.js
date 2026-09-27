@@ -44,6 +44,7 @@
       this.draft = null;
       this.infoWindow = null;
     }
+    resize() { google.maps.event.trigger(this.map, 'resize'); }
     onClick(cb) { this.map.addListener('click', (e) => cb({ lat: e.latLng.lat(), lng: e.latLng.lng() })); }
     onMoveEnd(cb) { this.map.addListener('idle', cb); }
     getCenter() { const c = this.map.getCenter(); return { lat: c.lat(), lng: c.lng() }; }
@@ -119,6 +120,7 @@
       this.draft = null;
       this.circle = null;
     }
+    resize() { this.map.invalidateSize(); }
     onClick(cb) { this.map.on('click', (e) => cb({ lat: e.latlng.lat, lng: e.latlng.lng })); }
     onMoveEnd(cb) { this.map.on('moveend', cb); }
     getCenter() { const c = this.map.getCenter(); return { lat: c.lat, lng: c.lng }; }

@@ -14,9 +14,29 @@
   let draftAccuracy = null;
   let activeTab = 'search';
 
+  // ---------- mobile map collapse ----------
+  const isMobile = () => window.matchMedia('(max-width: 800px)').matches;
+  let userCollapsed = false; // the visitor's own choice on map tabs
+  function setMapCollapsed(on) {
+    document.body.classList.toggle('map-collapsed', on);
+    const b = $('#map-toggle');
+    b.textContent = on ? '🗺️ แสดงแผนที่' : '🗺️ ซ่อนแผนที่';
+    b.setAttribute('aria-pressed', String(on));
+    if (!on && map) setTimeout(() => map.resize && map.resize(), 50);
+  }
+  $('#map-toggle').addEventListener('click', () => {
+    userCollapsed = !document.body.classList.contains('map-collapsed');
+    setMapCollapsed(userCollapsed);
+  });
+  function showMapIfNeeded() { if (isMobile() && document.body.classList.contains('map-collapsed')) { userCollapsed = false; setMapCollapsed(false); } }
+
   // ---------- tabs ----------
   function setTab(name) {
     activeTab = name;
+    // text-only tabs get the whole screen on phones; map tabs follow the visitor's choice
+    const textTab = name === 'stats' || name === 'help' || name === 'manage';
+    $('#map-toggle').hidden = textTab;
+    if (isMobile()) setMapCollapsed(textTab ? true : userCollapsed);
     $$('.tab').forEach((b) => {
       const on = b.dataset.tab === name;
       b.classList.toggle('active', on);
@@ -232,6 +252,7 @@
     st.textContent = accuracy != null ? `ปักหมุดแล้ว (GPS ±${Math.round(accuracy)} ม.)` : 'ปักหมุดแล้ว';
     st.className = 'ok';
     if (map) {
+      if (pan) showMapIfNeeded();
       map.setDraft(draft, onDraftMove);
       map.setAccuracyCircle(accuracy ? draft : null, accuracy);
       if (pan) map.panTo(draft, Math.max(map.getZoom(), 18));
@@ -251,8 +272,8 @@
     if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) setDraft({ lat, lng }, { pan: true, fromInput: true });
   }
 
-  $('#r-center').addEventListener('click', () => { if (map) setDraft(map.getCenter()); });
-  $('#r-geoloc').addEventListener('click', () => locate(true));
+  $('#r-center').addEventListener('click', () => { showMapIfNeeded(); if (map) setDraft(map.getCenter()); });
+  $('#r-geoloc').addEventListener('click', () => { showMapIfNeeded(); locate(true); });
   $('#map-me').addEventListener('click', () => locate(false));
 
   // Continuous GPS: watch for up to GPS_WATCH_MS, keep the most accurate fix,
