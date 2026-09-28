@@ -615,6 +615,12 @@
     $('#st-found').textContent = fmtN(st.found);
     $('#st-returned').textContent = fmtN(st.returned);
     $('#st-24h').textContent = fmtN(st.last24h);
+    if (st.visits) {
+      $('#st-vis-today').textContent = fmtN(st.visits.today.uniques);
+      $('#st-views-today').textContent = fmtN(st.visits.today.views);
+      $('#st-vis-total').textContent = fmtN(st.visits.total.uniques);
+      $('#st-views-total').textContent = fmtN(st.visits.total.views);
+    }
     const wrap = $('#st-progress');
     if (st.total > 0) {
       const rate = Math.round((st.returned / st.total) * 100);

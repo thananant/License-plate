@@ -124,6 +124,42 @@ function ocrBudgetOk() {
 
 app.use(express.json({ limit: '32kb' }));
 
+// ---------- visitor counter (privacy preserving) ----------
+// Counts page views and "people per day". A person is a SHA-256 of
+// (random salt that changes every day + IP + user agent); the hash lives in
+// memory only, is never written anywhere, and cannot be linked across days.
+// Only the aggregate numbers per day are stored.
+const thaiDay = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+const visit = { day: thaiDay(), salt: crypto.randomBytes(16), views: 0, people: new Set(), dirty: false };
+function rollVisitDay() {
+  const today = thaiDay();
+  if (today !== visit.day) {
+    store.visitsSave(visit.day, visit.views, visit.people.size);
+    visit.day = today; visit.salt = crypto.randomBytes(16); visit.views = 0; visit.people = new Set(); visit.dirty = false;
+  }
+}
+{
+  const saved = store.visitsDay(visit.day); // resume today's numbers after a restart
+  visit.views = saved.views;
+  visit.baseUniques = saved.uniques;
+}
+function countVisit(req) {
+  rollVisitDay();
+  visit.views += 1;
+  const id = crypto.createHash('sha256').update(visit.salt).update(String(req.ip || '')).update(String(req.headers['user-agent'] || '')).digest('base64');
+  visit.people.add(id);
+  visit.dirty = true;
+}
+function uniquesToday() { return (visit.baseUniques || 0) + visit.people.size; }
+function flushVisits() {
+  rollVisitDay();
+  if (!visit.dirty) return;
+  store.visitsSave(visit.day, visit.views, uniquesToday());
+  visit.dirty = false;
+}
+const visitTimer = setInterval(flushVisits, 60_000);
+visitTimer.unref();
+
 // ---------- helpers ----------
 const newId = () => crypto.randomBytes(9).toString('base64url'); // 12 chars, URL safe
 const newToken = () => crypto.randomBytes(24).toString('base64url'); // 32 chars
@@ -218,7 +254,17 @@ app.get('/api/config', readLimiter, (_req, res) => {
 let statsCache = { at: 0, data: null };
 app.get('/api/stats', readLimiter, (_req, res) => {
   if (Date.now() - statsCache.at > 30_000) statsCache = { at: Date.now(), data: store.stats() };
-  res.json(statsCache.data);
+  flushVisits();
+  const total = store.visitsTotal();
+  const since = new Date(Date.now() + 7 * 3600_000 - 13 * 86_400_000).toISOString().slice(0, 10);
+  res.json({
+    ...statsCache.data,
+    visits: {
+      today: { views: visit.views, uniques: uniquesToday() },
+      total: { views: total.views, uniques: total.uniques, days: total.days },
+      daily: store.visitsRange(since),
+    },
+  });
 });
 
 app.get('/api/reports', readLimiter, (req, res) => {
@@ -490,7 +536,8 @@ const ASSET_VERSION = assetHash.digest('hex').slice(0, 10);
 const INDEX_HTML = (await fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8'))
   .replace(/(href|src)="\/(css|js)\/([^"?]+)"/g, `$1="/$2/$3?v=${ASSET_VERSION}"`);
 
-function sendIndex(_req, res) {
+function sendIndex(req, res) {
+  countVisit(req);
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(INDEX_HTML);
@@ -559,6 +606,7 @@ const server = app.listen(PORT, () => {
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     server.close(() => {
+      try { flushVisits(); } catch { /* ignore */ }
       store.close();
       process.exit(0);
     });

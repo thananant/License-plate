@@ -363,3 +363,14 @@ test('gemini model auto-selection', () => {
   assert.equal(chooseGeminiModel([{ name: 'models/x', supportedGenerationMethods: ['embedContent'] }], 'y'), null);
   assert.deepEqual(rankGeminiModels(list, 'auto').slice(0, 2), ['gemini-3.0-flash', 'gemini-3.0-flash-lite']);
 });
+
+test('visitor counter counts page views and people without storing identities', async () => {
+  const before = (await (await fetch(BASE + '/api/stats')).json()).visits;
+  await fetch(BASE + '/', { headers: { 'user-agent': 'phone-A' } });
+  await fetch(BASE + '/', { headers: { 'user-agent': 'phone-A' } });
+  await fetch(BASE + '/', { headers: { 'user-agent': 'phone-B' } });
+  const after = (await (await fetch(BASE + '/api/stats')).json()).visits;
+  assert.equal(after.today.views - before.today.views, 3);
+  assert.ok(after.today.uniques - before.today.uniques >= 1 && after.today.uniques - before.today.uniques <= 2);
+  assert.ok(after.total.views >= after.today.views);
+});

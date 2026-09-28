@@ -33,6 +33,13 @@ export function openDatabase(dataDir) {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS visits (
+      day     TEXT PRIMARY KEY,
+      views   INTEGER NOT NULL DEFAULT 0,
+      uniques INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS feedback (
       id         TEXT PRIMARY KEY,
       kind       TEXT NOT NULL,
@@ -73,6 +80,11 @@ export function openDatabase(dataDir) {
     feedbackList: db.prepare(`SELECT id, kind, message, created_at FROM feedback ORDER BY created_at DESC LIMIT ?`),
     feedbackDelete: db.prepare(`DELETE FROM feedback WHERE id = ?`),
     feedbackCount: db.prepare(`SELECT COUNT(*) AS n FROM feedback`),
+    visitsUpsert: db.prepare(`INSERT INTO visits (day, views, uniques) VALUES (?, ?, ?)
+      ON CONFLICT(day) DO UPDATE SET views = excluded.views, uniques = excluded.uniques`),
+    visitsRange: db.prepare(`SELECT day, views, uniques FROM visits WHERE day >= ? ORDER BY day`),
+    visitsTotal: db.prepare(`SELECT COALESCE(SUM(views), 0) AS views, COALESCE(SUM(uniques), 0) AS uniques, COUNT(*) AS days FROM visits`),
+    visitsDay: db.prepare(`SELECT views, uniques FROM visits WHERE day = ?`),
     deleteAll: db.prepare(`DELETE FROM reports`),
     delete: db.prepare(`DELETE FROM reports WHERE id = ?`),
     count: db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE status = 'found'`),
@@ -141,6 +153,10 @@ export function openDatabase(dataDir) {
     feedbackList: (limit = 200) => stmts.feedbackList.all(limit),
     feedbackDelete: (id) => stmts.feedbackDelete.run(id),
     feedbackCount: () => stmts.feedbackCount.get().n,
+    visitsSave: (day, views, uniques) => stmts.visitsUpsert.run(day, views, uniques),
+    visitsDay: (day) => stmts.visitsDay.get(day) || { views: 0, uniques: 0 },
+    visitsRange: (sinceDay) => stmts.visitsRange.all(sinceDay),
+    visitsTotal: () => stmts.visitsTotal.get(),
     delete: (id) => stmts.delete.run(id),
     countFound: () => stmts.count.get().n,
     stats: () => {
